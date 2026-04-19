@@ -21,7 +21,8 @@ export const posApi = {
     servedById?: string;
     notes?: string;
     paymentMethod?: string;
-    items: { menuItemId: string; quantity: number; notes?: string; modifiers?: unknown[] }[];
+    discount?: { type: string; value: number; reason: string };
+    items: { menuItemId: string; variantId?: string; variantName?: string; quantity: number; notes?: string; modifiers?: unknown[] }[];
   }) => api.post<PosOrder>('/pos/orders', data).then((r) => r.data),
 
   listOrders: (branchId: string, params?: Record<string, unknown>) =>
