@@ -18,6 +18,7 @@ export const posApi = {
     orderType: string;
     tableId?: string;
     customerId?: string;
+    servedById?: string;
     notes?: string;
     paymentMethod?: string;
     items: { menuItemId: string; quantity: number; notes?: string; modifiers?: unknown[] }[];
@@ -34,7 +35,10 @@ export const posApi = {
   processPayment: (
     orderId: string,
     payments: { method: string; amount: number; reference?: string }[],
-  ) => api.post(`/pos/orders/${orderId}/payment`, { payments }).then((r) => r.data),
+    customerLeft = true,
+    paymentMethod?: string,
+    customer?: { fullName?: string; phone?: string; email?: string; optInEmail?: boolean },
+  ) => api.post(`/pos/orders/${orderId}/payment`, { payments, customerLeft, paymentMethod, customer }).then((r) => r.data),
 
   processRefund: (orderId: string, amount: number, reason: string, method: string) =>
     api.post(`/pos/orders/${orderId}/refund`, { amount, reason, method }).then((r) => r.data),

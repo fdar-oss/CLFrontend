@@ -20,6 +20,10 @@ export const financeApi = {
   createExpenseCategory: (name: string) =>
     api.post<ExpenseCategory>('/finance/expense-categories', { name }).then((r) => r.data),
 
+  // Dashboard
+  getDashboard: (branchId?: string) =>
+    api.get('/finance/dashboard', { params: { branchId } }).then((r) => r.data),
+
   // Daily summaries
   getDailySummaries: (params?: { branchId?: string; from?: string; to?: string }) =>
     api.get<DailySalesSummary[]>('/finance/daily-summaries', { params }).then((r) => r.data),

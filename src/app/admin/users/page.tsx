@@ -13,33 +13,73 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from '@/components/ui/table';
 import { PageSpinner } from '@/components/ui/spinner';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Pencil, UserX } from 'lucide-react';
 import { USER_ROLES, ROLE_LABELS } from '@/lib/utils/constants';
 import { formatDate } from '@/lib/utils/format';
 import type { User } from '@/lib/types';
 
+type CreateForm = {
+  email: string; fullName: string; password: string; role: string; phone?: string; branchId?: string;
+};
+type EditForm = {
+  fullName: string; role: string; phone?: string; branchId?: string;
+};
+
 export default function UsersPage() {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
   const [search, setSearch] = useState('');
 
   const { data: users = [], isLoading } = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
   const { data: branches = [] } = useQuery({ queryKey: ['branches'], queryFn: branchesApi.list });
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<{
-    email: string; fullName: string; password: string; role: string; phone?: string; branchId?: string;
-  }>();
+  const createForm = useForm<CreateForm>();
+  const editForm = useForm<EditForm>();
 
   const createMut = useMutation({
     mutationFn: usersApi.create,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users'] });
       toast.success('User created');
-      setOpen(false);
-      reset();
+      setCreateOpen(false);
+      createForm.reset();
     },
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
   });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: EditForm }) =>
+      usersApi.update(id, { ...data, branchId: data.branchId || undefined }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success('User updated');
+      setEditTarget(null);
+      editForm.reset();
+    },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
+  });
+
+  const deactivateMut = useMutation({
+    mutationFn: (id: string) => usersApi.deactivate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success('User deactivated');
+      setDeactivateTarget(null);
+    },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
+  });
+
+  function openEdit(user: User) {
+    editForm.reset({
+      fullName: user.fullName,
+      role: user.role,
+      phone: user.phone || '',
+      branchId: user.branch?.id || '',
+    });
+    setEditTarget(user);
+  }
 
   const filtered = users.filter(
     (u) =>
@@ -54,7 +94,7 @@ export default function UsersPage() {
       <PageHeader
         title="Users"
         description="Manage platform users and their roles"
-        action={<Button onClick={() => { reset(); setOpen(true); }}><Plus className="w-4 h-4" /> Add User</Button>}
+        action={<Button onClick={() => { createForm.reset(); setCreateOpen(true); }}><Plus className="w-4 h-4" /> Add User</Button>}
       />
 
       <div className="flex items-center gap-3 mb-4">
@@ -78,6 +118,7 @@ export default function UsersPage() {
               <TableHead>Branch</TableHead>
               <TableHead>Last Login</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -105,41 +146,120 @@ export default function UsersPage() {
                     {user.isActive ? 'Active' : 'Inactive'}
                   </Badge>
                 </TableCell>
+                <TableCell>
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => openEdit(user)}
+                      className="p-1.5 rounded-md text-gray-500 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                      title="Edit user"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    {user.isActive && (
+                      <button
+                        onClick={() => setDeactivateTarget(user)}
+                        className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Deactivate user"
+                      >
+                        <UserX className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>New User</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit((d) => createMut.mutateAsync(d))}>
+          <form onSubmit={createForm.handleSubmit((d) => createMut.mutateAsync(d))}>
             <DialogBody>
-              <Input label="Full Name" error={errors.fullName?.message} {...register('fullName', { required: 'Required' })} />
-              <Input label="Email" type="email" error={errors.email?.message} {...register('email', { required: 'Required' })} />
-              <Input label="Password" type="password" error={errors.password?.message} {...register('password', { required: 'Required', minLength: { value: 6, message: 'Min 6 chars' } })} />
+              <Input label="Full Name" error={createForm.formState.errors.fullName?.message} {...createForm.register('fullName', { required: 'Required' })} />
+              <Input label="Email" type="email" error={createForm.formState.errors.email?.message} {...createForm.register('email', { required: 'Required' })} />
+              <Input label="Password" type="password" error={createForm.formState.errors.password?.message} {...createForm.register('password', { required: 'Required', minLength: { value: 8, message: 'Min 8 chars' } })} />
               <div className="grid grid-cols-2 gap-4">
                 <Select
                   label="Role"
                   options={USER_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r }))}
                   placeholder="Select role"
-                  {...register('role', { required: 'Required' })}
+                  {...createForm.register('role', { required: 'Required' })}
                 />
                 <Select
                   label="Branch"
                   options={branches.map((b) => ({ value: b.id, label: b.name }))}
                   placeholder="All branches"
-                  {...register('branchId')}
+                  {...createForm.register('branchId')}
                 />
               </div>
-              <Input label="Phone" placeholder="0300-1234567" {...register('phone')} />
+              <Input label="Phone" placeholder="0300-1234567" {...createForm.register('phone')} />
             </DialogBody>
             <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" loading={isSubmitting}>Create User</Button>
+              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" loading={createForm.formState.isSubmitting}>Create User</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
+          <form onSubmit={editForm.handleSubmit((d) => editTarget && updateMut.mutateAsync({ id: editTarget.id, data: d }))}>
+            <DialogBody>
+              <Input label="Full Name" error={editForm.formState.errors.fullName?.message} {...editForm.register('fullName', { required: 'Required' })} />
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Email</label>
+                <p className="text-sm text-gray-700 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">{editTarget?.email}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Select
+                  label="Role"
+                  options={USER_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] || r }))}
+                  placeholder="Select role"
+                  {...editForm.register('role', { required: 'Required' })}
+                />
+                <Select
+                  label="Branch"
+                  options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                  placeholder="All branches"
+                  {...editForm.register('branchId')}
+                />
+              </div>
+              <Input label="Phone" placeholder="0300-1234567" {...editForm.register('phone')} />
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="outline" type="button" onClick={() => setEditTarget(null)}>Cancel</Button>
+              <Button type="submit" loading={updateMut.isPending}>Save Changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate confirm */}
+      <Dialog open={!!deactivateTarget} onOpenChange={(o) => !o && setDeactivateTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Deactivate user?</DialogTitle></DialogHeader>
+          <DialogBody>
+            <p className="text-sm text-gray-600">
+              <span className="font-semibold text-gray-900">{deactivateTarget?.fullName}</span> will no longer be able to log in.
+              You can reactivate them later by editing their account.
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setDeactivateTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deactivateTarget && deactivateMut.mutate(deactivateTarget.id)}
+              loading={deactivateMut.isPending}
+            >
+              Deactivate
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

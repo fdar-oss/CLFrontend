@@ -61,8 +61,8 @@ export function KdsTicketCard({ ticket, onBump }: KdsTicketCardProps) {
         <div className="flex items-center gap-2">
           <span className="font-bold text-sm text-gray-900">#{ticket.ticketNumber}</span>
           <span className="text-xs text-gray-500">
-            {ticket.order.orderType.replace('_', ' ')}
-            {ticket.order.table ? ` · T${ticket.order.table.number}` : ''}
+            {(ticket.order?.orderType || '').replace('_', ' ')}
+            {ticket.order?.table ? ` · T${ticket.order.table.number}` : ''}
           </span>
         </div>
         <ElapsedTimer startedAt={ticket.startedAt} createdAt={ticket.createdAt} />

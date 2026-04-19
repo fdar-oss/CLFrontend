@@ -86,6 +86,16 @@ export interface ModifierGroup {
   modifiers: Modifier[];
 }
 
+export interface MenuItemVariant {
+  id: string;
+  menuItemId: string;
+  name: string;
+  price: number;
+  sku: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -95,7 +105,7 @@ export interface MenuItem {
   basePrice: number;
   effectivePrice?: number;
   isAvailable?: boolean;
-  type: string;
+  itemType: string;
   isActive: boolean;
   availablePOS: boolean;
   availableOnline: boolean;
@@ -104,6 +114,7 @@ export interface MenuItem {
   sortOrder: number;
   category?: MenuCategory;
   taxCategory?: TaxCategory | null;
+  variants?: MenuItemVariant[];
   modifierGroups?: { modifierGroup: ModifierGroup; sortOrder: number }[];
   branchPrices?: { branchId: string; price: number; isAvailable: boolean }[];
 }
@@ -222,7 +233,7 @@ export interface StockItem {
   sku: string | null;
   unit: string;
   minStockLevel: number | null;
-  costPrice: number | null;
+  unitCost: number | null;
   isActive: boolean;
   category?: StockCategory | null;
 }

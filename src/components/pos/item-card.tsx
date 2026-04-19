@@ -3,14 +3,24 @@
 import { formatCurrency } from '@/lib/utils/format';
 import type { MenuItem } from '@/lib/types';
 
+const API_HOST = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/v1').replace(/\/v\d+\/?$/, '');
+const imageUrl = (path?: string | null) => (path ? (path.startsWith('http') ? path : `${API_HOST}${path}`) : null);
+
 interface ItemCardProps {
   item: MenuItem & { price?: number; isAvailable?: boolean };
   onClick: () => void;
 }
 
 export function ItemCard({ item, onClick }: ItemCardProps) {
+  const hasVariants = (item.variants?.length ?? 0) > 0;
   const price = item.price ?? item.basePrice;
   const available = item.isAvailable !== false;
+  const minPrice = hasVariants
+    ? Math.min(...(item.variants || []).map(v => Number(v.price)))
+    : price;
+  const maxPrice = hasVariants
+    ? Math.max(...(item.variants || []).map(v => Number(v.price)))
+    : price;
 
   return (
     <button
@@ -18,28 +28,35 @@ export function ItemCard({ item, onClick }: ItemCardProps) {
       onClick={onClick}
       disabled={!available}
       className={`
-        relative w-full text-left rounded-xl border-2 p-3 transition-all select-none
+        relative w-full text-left rounded-lg border p-2 transition-all select-none flex gap-2
         ${available
-          ? 'border-gray-200 bg-white hover:border-brand-400 hover:shadow-md active:scale-95 active:shadow-sm cursor-pointer'
+          ? 'border-gray-200 bg-white hover:border-brand-400 hover:shadow active:scale-[0.97] cursor-pointer'
           : 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'}
       `}
     >
-      {/* Image placeholder / first letter */}
-      <div className="w-full aspect-square rounded-lg bg-brand-50 flex items-center justify-center mb-2 overflow-hidden">
+      {/* Compact thumbnail / letter */}
+      <div className="w-12 h-12 shrink-0 rounded-md bg-brand-50 flex items-center justify-center overflow-hidden">
         {item.image ? (
-          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl(item.image)!} alt={item.name} className="w-full h-full object-cover" />
         ) : (
-          <span className="text-3xl font-bold text-brand-200">{item.name.charAt(0)}</span>
+          <span className="text-base font-bold text-brand-300">{item.name.charAt(0)}</span>
         )}
       </div>
 
-      <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">{item.name}</p>
-
-      <div className="flex items-center justify-between mt-1.5">
-        <span className="text-sm font-bold text-brand-700">{formatCurrency(price)}</span>
-        {!available && (
-          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Unavail.</span>
-        )}
+      {/* Name + price */}
+      <div className="min-w-0 flex-1 flex flex-col justify-between py-0.5">
+        <p className="text-xs font-semibold text-gray-900 leading-tight line-clamp-2">{item.name}</p>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-brand-700">
+            {hasVariants && minPrice !== maxPrice
+              ? `${formatCurrency(minPrice)} – ${formatCurrency(maxPrice)}`
+              : formatCurrency(minPrice)}
+          </span>
+          {!available && (
+            <span className="text-[9px] font-medium text-gray-400 uppercase">Unavail.</span>
+          )}
+        </div>
       </div>
     </button>
   );

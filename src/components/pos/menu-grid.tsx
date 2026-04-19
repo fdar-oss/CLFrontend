@@ -26,8 +26,10 @@ export function MenuGrid({ categories }: MenuGridProps) {
     : categories.find((c) => c.id === activeCategory)?.menuItems ?? [];
 
   function handleItemClick(item: MenuItem & { price?: number }) {
+    const hasVariants = (item.variants?.length ?? 0) > 0;
     const hasModifiers = (item.modifierGroups?.length ?? 0) > 0;
-    if (hasModifiers) {
+    // If item has variants or modifiers, open the sheet for selection
+    if (hasVariants || hasModifiers) {
       setSelectedItem(item);
     } else {
       addToCart({
@@ -81,7 +83,7 @@ export function MenuGrid({ categories }: MenuGridProps) {
             {search ? 'No items match your search' : 'No items in this category'}
           </div>
         )}
-        <div className="grid grid-cols-3 gap-2.5 pt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-2 pt-2">
           {displayItems.map((item) => (
             <ItemCard
               key={`${item.id}-${item.price}`}

@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { PageSpinner } from '@/components/ui/spinner';
-import { Plus, Tag, Layers, Percent, ImagePlus, X } from 'lucide-react';
+import { Plus, Tag, Layers, Percent, ImagePlus, X, Trash2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
 import type { MenuCategory, MenuItem, ModifierGroup, TaxCategory } from '@/lib/types';
 
@@ -45,6 +45,19 @@ function CategoriesTab() {
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
   });
 
+  const deleteCatMut = useMutation({
+    mutationFn: menuApi.deleteCategory,
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['menu-categories'] });
+      if (res.deactivated) toast.info(res.reason);
+      else toast.success('Category permanently deleted');
+      setDeleteCat(null);
+    },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
+  });
+
+  const [deleteCat, setDeleteCat] = useState<MenuCategory | null>(null);
+
   function openCreate() { setEditing(null); reset({ name: '', description: '', sortOrder: 0 }); setOpen(true); }
   function openEdit(cat: MenuCategory) { setEditing(cat); reset({ name: cat.name, description: cat.description || '', sortOrder: cat.sortOrder }); setOpen(true); }
   function closeDialog() { setOpen(false); setEditing(null); reset(); }
@@ -70,6 +83,7 @@ function CategoriesTab() {
               <TableHead>Items</TableHead>
               <TableHead>Sort Order</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -82,6 +96,17 @@ function CategoriesTab() {
                 <TableCell className="text-gray-500">{cat.sortOrder}</TableCell>
                 <TableCell>
                   <Badge variant={cat.isActive ? 'success' : 'secondary'}>{cat.isActive ? 'Active' : 'Inactive'}</Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteCat(cat); }}
+                      className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Delete category"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -105,6 +130,31 @@ function CategoriesTab() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete category confirmation */}
+      <Dialog open={!!deleteCat} onOpenChange={(o) => !o && setDeleteCat(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Delete category?</DialogTitle></DialogHeader>
+          <DialogBody>
+            <p className="text-sm text-gray-600">
+              <span className="font-semibold text-gray-900">{deleteCat?.name}</span>
+              {(deleteCat?._count?.menuItems ?? 0) > 0
+                ? ` has ${deleteCat?._count?.menuItems} items — it will be deactivated instead of deleted.`
+                : ' has no items and will be permanently deleted.'}
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setDeleteCat(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteCat && deleteCatMut.mutate(deleteCat.id)}
+              loading={deleteCatMut.isPending}
+            >
+              {(deleteCat?._count?.menuItems ?? 0) > 0 ? 'Deactivate' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -121,6 +171,7 @@ function ItemsTab() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: items = [], isLoading } = useQuery({ queryKey: ['menu-items'], queryFn: () => menuApi.listItems() });
@@ -128,7 +179,7 @@ function ItemsTab() {
   const { data: modifierGroups = [] } = useQuery({ queryKey: ['modifier-groups'], queryFn: menuApi.listModifierGroups });
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<{
-    name: string; sku?: string; description?: string; basePrice: number; type: string;
+    name: string; sku?: string; description?: string; basePrice: number; itemType: string;
     categoryId: string; availablePOS: boolean; availableOnline: boolean;
     sortOrder: number; modifierGroupIds?: string[];
   }>();
@@ -145,11 +196,34 @@ function ItemsTab() {
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
   });
 
+  const toggleMut = useMutation({
+    mutationFn: menuApi.toggleItem,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['menu-items'] }); },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: menuApi.deleteItem,
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['menu-items'] });
+      if (res.deactivated) {
+        toast.info('Item has order history — deactivated instead of deleted');
+      } else {
+        toast.success('Item permanently deleted');
+      }
+      setDeleteTarget(null);
+    },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
+  });
+
+  const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
+
   function openCreate() {
     setEditing(null);
     setImagePreview(null);
     setImageFile(null);
-    reset({ name: '', sku: '', description: '', basePrice: 0, type: 'FOOD', categoryId: '', availablePOS: true, availableOnline: false, sortOrder: 0 });
+    setSelectedGroupIds([]);
+    reset({ name: '', sku: '', description: '', basePrice: 0, itemType: 'FOOD', categoryId: '', availablePOS: true, availableOnline: false, sortOrder: 0 });
     setOpen(true);
   }
 
@@ -157,16 +231,21 @@ function ItemsTab() {
     setEditing(item);
     setImagePreview(item.image ? `http://localhost:4000${item.image}` : null);
     setImageFile(null);
+    setSelectedGroupIds(item.modifierGroups?.map((mg) => mg.modifierGroup.id) ?? []);
     reset({
       name: item.name, sku: item.sku || '', description: item.description || '',
-      basePrice: item.basePrice, type: item.type, categoryId: item.categoryId,
+      basePrice: item.basePrice, itemType: item.itemType, categoryId: item.categoryId,
       availablePOS: item.availablePOS, availableOnline: item.availableOnline,
       sortOrder: item.sortOrder,
     });
     setOpen(true);
   }
 
-  function closeDialog() { setOpen(false); setEditing(null); setImagePreview(null); setImageFile(null); reset(); }
+  function closeDialog() { setOpen(false); setEditing(null); setImagePreview(null); setImageFile(null); setSelectedGroupIds([]); reset(); }
+
+  function toggleGroup(id: string) {
+    setSelectedGroupIds((prev) => prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]);
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -189,7 +268,11 @@ function ItemsTab() {
       }
       setUploading(false);
     }
-    const payload = { ...data, ...(imageUrl ? { image: imageUrl } : {}) };
+    const payload = {
+      ...data,
+      ...(imageUrl ? { image: imageUrl } : {}),
+      modifierGroupIds: selectedGroupIds,
+    };
     if (editing) await updateMut.mutateAsync({ id: editing.id, data: payload });
     else await createMut.mutateAsync(payload);
   }
@@ -223,6 +306,7 @@ function ItemsTab() {
               <TableHead>Type</TableHead>
               <TableHead>Channels</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -248,7 +332,7 @@ function ItemsTab() {
                 <TableCell className="text-gray-500 text-sm font-mono">{item.sku || '—'}</TableCell>
                 <TableCell className="text-gray-500 text-sm">{item.category?.name || '—'}</TableCell>
                 <TableCell className="font-medium">{formatCurrency(item.basePrice)}</TableCell>
-                <TableCell><Badge variant="secondary">{item.type}</Badge></TableCell>
+                <TableCell><Badge variant="secondary">{item.itemType}</Badge></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     {item.availablePOS && <Badge variant="info">POS</Badge>}
@@ -256,7 +340,24 @@ function ItemsTab() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={item.isActive ? 'success' : 'secondary'}>{item.isActive ? 'Active' : 'Inactive'}</Badge>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleMut.mutate(item.id); }}
+                    title={item.isActive ? 'Click to deactivate' : 'Click to reactivate'}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${item.isActive ? 'bg-green-500' : 'bg-gray-300'}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${item.isActive ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </TableCell>
+                <TableCell>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(item); }}
+                      className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Permanently delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -319,7 +420,7 @@ function ItemsTab() {
                 <Select
                   label="Type"
                   options={ITEM_TYPES.map((t) => ({ value: t, label: t }))}
-                  {...register('type', { required: 'Required' })}
+                  {...register('itemType', { required: 'Required' })}
                 />
               </div>
               <Select
@@ -342,6 +443,40 @@ function ItemsTab() {
                   Available Online
                 </label>
               </div>
+
+              {/* Modifier Groups */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Modifier Groups
+                  <span className="font-normal text-gray-400 ml-1">— attach Size, Milk, Add-ons, etc.</span>
+                </label>
+                {modifierGroups.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic px-3 py-3 bg-gray-50 rounded-lg border border-gray-200">
+                    No modifier groups exist yet. Create one in the Modifiers tab first.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {modifierGroups.map((g) => {
+                      const isSel = selectedGroupIds.includes(g.id);
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => toggleGroup(g.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all ${
+                            isSel
+                              ? 'border-brand-500 bg-brand-50 text-brand-800'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          {g.name}
+                          <span className="ml-1.5 text-[10px] text-gray-400">({g.modifiers.length})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </DialogBody>
             <DialogFooter>
               <Button variant="outline" type="button" onClick={closeDialog}>Cancel</Button>
@@ -350,6 +485,31 @@ function ItemsTab() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Permanently delete item?</DialogTitle></DialogHeader>
+          <DialogBody>
+            <p className="text-sm text-gray-600">
+              <span className="font-semibold text-gray-900">{deleteTarget?.name}</span> will be permanently deleted along with its recipe and pricing data. This cannot be undone.
+            </p>
+            <p className="text-xs text-gray-400 mt-2">
+              If the item is just temporarily unavailable, use the toggle switch instead to deactivate it.
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
+              loading={deleteMut.isPending}
+            >
+              Delete Permanently
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

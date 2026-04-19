@@ -9,6 +9,8 @@ export interface CartItem {
   unitPrice: number;
   quantity: number;
   notes?: string;
+  variantId?: string;
+  variantName?: string;
   modifiers: { modifierId: string; modifierName: string; priceAdjustment: number }[];
 }
 
@@ -21,9 +23,15 @@ interface PosState {
   orderType: string;
   selectedTable: RestaurantTable | null;
   customerId: string | null;
+  servedById: string | null;
+  currentOrderId: string | null;
+  discount: { type: 'PERCENT' | 'FLAT'; value: number; reason: string } | null;
   setOrderType: (type: string) => void;
   setSelectedTable: (table: RestaurantTable | null) => void;
   setCustomerId: (id: string | null) => void;
+  setServedById: (id: string | null) => void;
+  setCurrentOrderId: (id: string | null) => void;
+  setDiscount: (d: { type: 'PERCENT' | 'FLAT'; value: number; reason: string } | null) => void;
 
   // Cart
   cart: CartItem[];
@@ -38,7 +46,8 @@ interface PosState {
 }
 
 function modifierKey(item: CartItem): string {
-  return item.modifiers.map((m) => m.modifierId).sort().join(',');
+  const modKey = item.modifiers.map((m) => m.modifierId).sort().join(',');
+  return item.variantId ? `v:${item.variantId}|${modKey}` : modKey;
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
@@ -48,9 +57,15 @@ export const usePosStore = create<PosState>((set, get) => ({
   orderType: 'DINE_IN',
   selectedTable: null,
   customerId: null,
+  servedById: null,
+  currentOrderId: null,
+  discount: null,
   setOrderType: (orderType) => set({ orderType }),
   setSelectedTable: (selectedTable) => set({ selectedTable }),
   setCustomerId: (customerId) => set({ customerId }),
+  setServedById: (servedById) => set({ servedById }),
+  setCurrentOrderId: (currentOrderId) => set({ currentOrderId }),
+  setDiscount: (discount) => set({ discount }),
 
   cart: [],
 
@@ -95,7 +110,7 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   clearCart: () =>
-    set({ cart: [], selectedTable: null, customerId: null, orderType: 'DINE_IN' }),
+    set({ cart: [], selectedTable: null, customerId: null, servedById: null, currentOrderId: null, discount: null, orderType: 'DINE_IN' }),
 
   cartTotal: () => {
     const { cart } = get();

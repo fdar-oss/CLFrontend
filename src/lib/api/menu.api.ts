@@ -19,6 +19,7 @@ export const menuApi = {
     api.post<MenuItem>('/menu/items', data).then((r) => r.data),
   updateItem: (id: string, data: Partial<MenuItem>) =>
     api.patch<MenuItem>(`/menu/items/${id}`, data).then((r) => r.data),
+  toggleItem: (id: string) => api.patch(`/menu/items/${id}/toggle`).then((r) => r.data),
   deleteItem: (id: string) => api.delete(`/menu/items/${id}`).then((r) => r.data),
   setBranchPrice: (itemId: string, branchId: string, price: number, isAvailable?: boolean) =>
     api.patch(`/menu/items/${itemId}/branch-price/${branchId}`, { price, isAvailable }).then((r) => r.data),

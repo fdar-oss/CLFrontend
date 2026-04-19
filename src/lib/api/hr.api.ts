@@ -39,6 +39,15 @@ export const hrApi = {
   approveLeave: (id: string) => api.patch(`/hr/leaves/${id}/approve`).then((r) => r.data),
   rejectLeave: (id: string) => api.patch(`/hr/leaves/${id}/reject`).then((r) => r.data),
 
+  // Shifts / Scheduling
+  listShifts: (params?: Record<string, unknown>) =>
+    api.get('/hr/shifts', { params }).then((r) => r.data),
+  createShift: (data: { employeeId: string; branchId: string; date: string; startTime: string; endTime: string; type: string; notes?: string }) =>
+    api.post('/hr/shifts', data).then((r) => r.data),
+  deleteShift: (id: string) => api.delete(`/hr/shifts/${id}`).then((r) => r.data),
+  getLaborSummary: (from: string, to: string, branchId?: string) =>
+    api.get('/hr/labor-summary', { params: { from, to, branchId } }).then((r) => r.data),
+
   // Payroll
   getPayrollPeriods: () => api.get<PayrollPeriod[]>('/hr/payroll/periods').then((r) => r.data),
   generatePayroll: (month: number, year: number) =>

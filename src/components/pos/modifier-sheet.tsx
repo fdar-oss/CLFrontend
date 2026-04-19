@@ -14,7 +14,19 @@ interface ModifierSheetProps {
 
 export function ModifierSheet({ item, onClose }: ModifierSheetProps) {
   const addToCart = usePosStore((s) => s.addToCart);
-  const basePrice = item.price ?? item.basePrice;
+  const variants = item.variants ?? [];
+  const hasVariants = variants.length > 0;
+
+  // Variant selection
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    hasVariants ? variants[0]?.id ?? null : null,
+  );
+  const selectedVariant = variants.find((v) => v.id === selectedVariantId);
+
+  // Price depends on variant selection
+  const basePrice = hasVariants
+    ? Number(selectedVariant?.price ?? item.basePrice)
+    : Number(item.price ?? item.basePrice);
 
   // selected: { groupId -> modifierId[] }
   const [selected, setSelected] = useState<Record<string, string[]>>({});
@@ -37,6 +49,7 @@ export function ModifierSheet({ item, onClose }: ModifierSheetProps) {
   }
 
   function isValid() {
+    if (hasVariants && !selectedVariantId) return false;
     return groups.every((g) => {
       if (!g.isRequired) return true;
       const sel = selected[g.id] ?? [];
@@ -48,7 +61,7 @@ export function ModifierSheet({ item, onClose }: ModifierSheetProps) {
     return groups.flatMap((g) =>
       (selected[g.id] ?? []).map((modId) => {
         const mod = g.modifiers.find((m) => m.id === modId)!;
-        return { modifierId: mod.id, modifierName: mod.name, priceAdjustment: mod.priceAdjustment };
+        return { modifierId: mod.id, modifierName: mod.name, priceAdjustment: Number(mod.priceAdjustment) };
       }),
     );
   }
@@ -59,14 +72,17 @@ export function ModifierSheet({ item, onClose }: ModifierSheetProps) {
 
   function handleAdd() {
     if (!isValid()) return;
+    const variantLabel = selectedVariant ? ` (${selectedVariant.name})` : '';
     addToCart({
       menuItemId: item.id,
-      itemName: item.name,
+      itemName: `${item.name}${variantLabel}`,
       unitPrice: basePrice,
       quantity,
       notes: notes || undefined,
       modifiers: selectedModifiers(),
-    });
+      variantId: selectedVariantId || undefined,
+      variantName: selectedVariant?.name,
+    } as any);
     onClose();
   }
 
@@ -88,9 +104,42 @@ export function ModifierSheet({ item, onClose }: ModifierSheetProps) {
           </button>
         </div>
 
-        {/* Modifier Groups */}
+        {/* Variant + Modifier Groups */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {groups.length === 0 && (
+          {/* Variant picker */}
+          {hasVariants && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-gray-800">Size</h3>
+                <span className="text-[10px] font-medium bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Required</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {variants.map((v) => {
+                  const isSel = v.id === selectedVariantId;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setSelectedVariantId(v.id)}
+                      className={`
+                        flex flex-col items-center py-3 px-4 rounded-xl border-2 transition-all
+                        ${isSel
+                          ? 'border-brand-500 bg-brand-50'
+                          : 'border-gray-200 hover:border-gray-300'}
+                      `}
+                    >
+                      <span className={`text-sm font-bold ${isSel ? 'text-brand-800' : 'text-gray-700'}`}>{v.name}</span>
+                      <span className={`text-lg font-bold mt-0.5 ${isSel ? 'text-brand-700' : 'text-gray-900'}`}>
+                        {formatCurrency(Number(v.price))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {groups.length === 0 && !hasVariants && (
             <p className="text-sm text-gray-400 text-center py-4">No customization options</p>
           )}
 
@@ -131,9 +180,9 @@ export function ModifierSheet({ item, onClose }: ModifierSheetProps) {
                           </div>
                           <span className="font-medium">{mod.name}</span>
                         </div>
-                        {mod.priceAdjustment !== 0 && (
-                          <span className={`text-xs font-semibold ${mod.priceAdjustment > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {mod.priceAdjustment > 0 ? '+' : ''}{formatCurrency(mod.priceAdjustment)}
+                        {Number(mod.priceAdjustment) !== 0 && (
+                          <span className={`text-xs font-semibold ${Number(mod.priceAdjustment) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {Number(mod.priceAdjustment) > 0 ? '+' : ''}{formatCurrency(Number(mod.priceAdjustment))}
                           </span>
                         )}
                       </button>

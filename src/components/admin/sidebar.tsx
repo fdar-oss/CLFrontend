@@ -8,7 +8,7 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import {
   LayoutDashboard, GitBranch, Users, UtensilsCrossed, Package,
   ShoppingCart, UserCheck, DollarSign, Heart, Megaphone,
-  Receipt, Monitor,
+  Receipt, Monitor, BarChart3,
 } from 'lucide-react';
 
 interface NavItem {
@@ -45,6 +45,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Finance',
     items: [
       { label: 'Finance', href: '/admin/finance', icon: DollarSign },
+      { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
       { label: 'FBR', href: '/admin/fbr', icon: Monitor },
     ],
   },

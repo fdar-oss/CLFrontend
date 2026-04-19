@@ -6,10 +6,13 @@ import { Sidebar } from '@/components/admin/sidebar';
 import { Header } from '@/components/admin/header';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { PageSpinner } from '@/components/ui/spinner';
+import { useIdleLogout } from '@/lib/hooks/use-idle-logout';
+import { IdleWarning } from '@/components/idle-warning';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
   const router = useRouter();
+  const { showIdleWarning, dismissIdleWarning } = useIdleLogout(isAuthenticated);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -27,6 +30,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Header />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+      <IdleWarning open={showIdleWarning} onStay={dismissIdleWarning} />
     </div>
   );
 }

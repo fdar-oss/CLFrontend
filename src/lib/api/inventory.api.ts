@@ -24,7 +24,7 @@ export const inventoryApi = {
   }) => api.post('/inventory/movements', data).then((r) => r.data),
 
   getRecipe: (menuItemId: string) =>
-    api.get<Recipe>(`/inventory/recipes/${menuItemId}`).then((r) => r.data),
+    api.get<Recipe>(`/inventory/recipes/${menuItemId}`).then((r) => r.data).catch(() => null),
   upsertRecipe: (menuItemId: string, data: { ingredients: unknown[] }) =>
     api.post(`/inventory/recipes/${menuItemId}`, data).then((r) => r.data),
 
@@ -39,4 +39,15 @@ export const inventoryApi = {
     api.get<StockLocation[]>(`/inventory/locations/${branchId}`).then((r) => r.data),
   createLocation: (branchId: string, name: string, isDefault = false) =>
     api.post<StockLocation>('/inventory/locations', { branchId, name, isDefault }).then((r) => r.data),
+
+  // Cost Analysis
+  getCostAnalysis: () => api.get('/inventory/cost-analysis').then((r) => r.data),
+
+  // Packaging Rules
+  listPackagingRules: () =>
+    api.get('/inventory/packaging-rules').then((r) => r.data),
+  createPackagingRule: (data: { stockItemId: string; orderType: string; itemType: string; sizeTag?: string; scope: string; quantity?: number }) =>
+    api.post('/inventory/packaging-rules', data).then((r) => r.data),
+  deletePackagingRule: (id: string) =>
+    api.delete(`/inventory/packaging-rules/${id}`).then((r) => r.data),
 };

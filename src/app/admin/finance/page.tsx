@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { PageSpinner } from '@/components/ui/spinner';
-import { Plus, CheckCircle, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
 import { format, subDays } from 'date-fns';
 import type { Expense } from '@/lib/types';
@@ -223,6 +223,167 @@ function SalesSummaryTab() {
   );
 }
 
+// ─── Expense Categories Tab ──────────────────────────────────────────────────
+
+function ExpenseCategoriesTab() {
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ['expense-categories'],
+    queryFn: financeApi.listExpenseCategories,
+  });
+
+  const createMut = useMutation({
+    mutationFn: () => financeApi.createExpenseCategory(name),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expense-categories'] }); toast.success('Category created'); setName(''); },
+    onError: (e: unknown) => toast.error((e as any)?.response?.data?.message || 'Failed'),
+  });
+
+  if (isLoading) return <PageSpinner />;
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-4">
+        Define expense categories so you can classify and track your spending. Common examples: Rent, Utilities, Salaries, Supplies, Marketing, Maintenance.
+      </p>
+
+      <div className="flex items-end gap-3 mb-6">
+        <div className="flex-1 max-w-xs">
+          <label className="block text-xs font-medium text-gray-500 mb-1.5">New Category</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Rent, Utilities, Petty Cash…"
+            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            onKeyDown={(e) => e.key === 'Enter' && name.trim() && createMut.mutate()}
+          />
+        </div>
+        <Button onClick={() => name.trim() && createMut.mutate()} disabled={!name.trim()} loading={createMut.isPending}>
+          <Plus className="w-4 h-4" /> Add
+        </Button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Category Name</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {categories.length === 0 && <TableEmpty message="No expense categories yet" />}
+            {categories.map((c: any) => (
+              <TableRow key={c.id}>
+                <TableCell className="font-medium">{c.name}</TableCell>
+                <TableCell className="text-gray-500 text-sm">{formatDate(c.createdAt)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+// ─── P&L Tab ─────────────────────────────────────────────────────────────────
+
+function ProfitLossTab() {
+  const { activeBranch } = useBranchStore();
+  const [from, setFrom] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
+  const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  const { data: pl, isLoading } = useQuery({
+    queryKey: ['profit-loss', activeBranch?.id, from, to],
+    queryFn: () => financeApi.getProfitLoss(from, to, activeBranch?.id),
+    enabled: !!from && !!to,
+  });
+
+  if (isLoading) return <PageSpinner />;
+
+  const revenue = pl?.revenue ?? pl?.totals?.netSales ?? 0;
+  const cogs = pl?.cogs ?? 0;
+  const grossProfit = pl?.grossProfit ?? revenue - cogs;
+  const expenses = pl?.totalExpenses ?? 0;
+  const netProfit = pl?.netProfit ?? grossProfit - expenses;
+  const marginPct = revenue > 0 ? (netProfit / revenue) * 100 : 0;
+  const expenseBreakdown: any[] = pl?.expenseBreakdown ?? [];
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <Input label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <Input label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Revenue</p>
+          <p className="text-2xl font-bold text-green-700 mt-1">{formatCurrency(revenue)}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Cost of Goods</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(cogs)}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Expenses</p>
+          <p className="text-2xl font-bold text-red-600 mt-1">{formatCurrency(expenses)}</p>
+        </div>
+        <div className={`rounded-xl border p-4 ${netProfit >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Net Profit</p>
+          <p className={`text-2xl font-bold mt-1 ${netProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(netProfit)}</p>
+          <p className={`text-xs mt-0.5 ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{marginPct.toFixed(1)}% margin</p>
+        </div>
+      </div>
+
+      {/* P&L breakdown */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h3 className="font-semibold text-gray-900 mb-4">Profit & Loss Statement</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between font-medium text-green-700 pb-2 border-b border-gray-200">
+            <span>Revenue (Net Sales)</span>
+            <span>{formatCurrency(revenue)}</span>
+          </div>
+
+          <div className="flex justify-between text-gray-600 pl-4">
+            <span>− Cost of Goods Sold (recipes)</span>
+            <span>({formatCurrency(cogs)})</span>
+          </div>
+
+          <div className="flex justify-between font-bold border-t border-gray-200 pt-2">
+            <span>Gross Profit</span>
+            <span className={grossProfit >= 0 ? 'text-green-700' : 'text-red-700'}>{formatCurrency(grossProfit)}</span>
+          </div>
+
+          <div className="pt-2 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Operating Expenses</p>
+            {expenseBreakdown.length > 0 ? (
+              expenseBreakdown.map((eb: any, i: number) => (
+                <div key={i} className="flex justify-between text-gray-600 pl-4 py-0.5">
+                  <span>− {eb.category || 'Uncategorized'}</span>
+                  <span>({formatCurrency(eb.total)})</span>
+                </div>
+              ))
+            ) : (
+              <div className="flex justify-between text-gray-600 pl-4">
+                <span>− Total Expenses</span>
+                <span>({formatCurrency(expenses)})</span>
+              </div>
+            )}
+          </div>
+
+          <div className={`flex justify-between font-bold text-lg border-t-2 border-gray-300 pt-3 mt-2 ${netProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+            <span>Net Profit / (Loss)</span>
+            <span>{formatCurrency(netProfit)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function FinancePage() {
@@ -230,15 +391,19 @@ export default function FinancePage() {
     <div>
       <PageHeader
         title="Finance"
-        description="Expenses, sales summaries, and reports"
+        description="Expenses, P&L, and sales summaries"
       />
-      <Tabs defaultValue="sales">
+      <Tabs defaultValue="expenses">
         <TabsList className="mb-6">
-          <TabsTrigger value="sales">Sales Summary</TabsTrigger>
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="categories">Expense Categories</TabsTrigger>
+          <TabsTrigger value="pl"><TrendingUp className="w-4 h-4 mr-1.5" /> P&L</TabsTrigger>
+          <TabsTrigger value="sales">Sales Summary</TabsTrigger>
         </TabsList>
-        <TabsContent value="sales"><SalesSummaryTab /></TabsContent>
         <TabsContent value="expenses"><ExpensesTab /></TabsContent>
+        <TabsContent value="categories"><ExpenseCategoriesTab /></TabsContent>
+        <TabsContent value="pl"><ProfitLossTab /></TabsContent>
+        <TabsContent value="sales"><SalesSummaryTab /></TabsContent>
       </Tabs>
     </div>
   );
