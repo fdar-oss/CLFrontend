@@ -148,6 +148,7 @@ export interface PosShift {
   totalSales: number | null;
   totalOrders: number | null;
   zReportData: Record<string, unknown> | null;
+  zReport?: Record<string, unknown> | null;
   openedBy: { id: string; fullName: string };
 }
 
