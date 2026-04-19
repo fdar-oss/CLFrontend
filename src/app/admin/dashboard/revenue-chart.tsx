@@ -2,9 +2,10 @@
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatDate } from '@/lib/utils/format';
-import type { DailySalesSummary } from '@/lib/types';
 
-export default function RevenueChart({ data }: { data: DailySalesSummary[] }) {
+type ChartData = { date: string; grossSales: number | string; totalOrders: number; [key: string]: unknown };
+
+export default function RevenueChart({ data }: { data: ChartData[] }) {
   const chartData = [...data]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((s) => ({
