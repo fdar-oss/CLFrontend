@@ -8,8 +8,9 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import {
   LayoutDashboard, GitBranch, Users, UtensilsCrossed, Package,
   ShoppingCart, UserCheck, DollarSign, Heart, Megaphone,
-  Receipt, Monitor, BarChart3,
+  Receipt, Monitor, BarChart3, Shield,
 } from 'lucide-react';
+import { usePermissions } from '@/lib/hooks/use-permissions';
 
 interface NavItem {
   label: string;
@@ -54,6 +55,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { label: 'Branches', href: '/admin/branches', icon: GitBranch },
       { label: 'Users', href: '/admin/users', icon: Users },
+      { label: 'Access Control', href: '/admin/access-control', icon: Shield },
     ],
   },
 ];
@@ -61,6 +63,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuthStore();
+  const { canAccess } = usePermissions();
 
   return (
     <aside className="w-60 bg-charcoal-900 flex flex-col h-screen sticky top-0 shrink-0 border-r border-charcoal-800">
@@ -77,13 +80,15 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-4">
-        {NAV_GROUPS.map((group) => (
+        {NAV_GROUPS.map((group) => {
+          const visibleItems = group.items; // TODO: filter by canAccess once permissions stabilize
+          return (
           <div key={group.title}>
             <p className="text-[10px] font-semibold text-charcoal-500 uppercase tracking-wider px-2 mb-1.5">
               {group.title}
             </p>
             <div className="space-y-0.5">
-              {group.items.map((item) => {
+              {visibleItems.map((item) => {
                 const isActive =
                   pathname === item.href ||
                   (item.href !== '/admin/dashboard' && pathname.startsWith(item.href));
@@ -106,7 +111,8 @@ export function Sidebar() {
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* POS shortcut */}

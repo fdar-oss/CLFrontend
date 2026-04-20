@@ -46,9 +46,9 @@ api.interceptors.response.use(
         return api(originalRequest);
       }
 
-      // Refresh failed — clear auth and redirect to login
+      // Refresh failed — clear auth and redirect to login (but not if already on login)
       clearAccessToken();
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
     }

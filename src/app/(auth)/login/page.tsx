@@ -33,7 +33,13 @@ function LoginForm() {
   async function onSubmit(data: FormData) {
     try {
       const res = await authApi.login(data.email, data.password);
+      // Set token first so me() call works
       setAuth(res.user, res.accessToken);
+      // Fetch full profile with permissions
+      try {
+        const me = await authApi.me();
+        if (me) setAuth(me, res.accessToken);
+      } catch {}
       toast.success(`Welcome back, ${res.user.fullName.split(' ')[0]}!`);
       router.replace(from);
     } catch (err: unknown) {

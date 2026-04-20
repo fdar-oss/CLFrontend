@@ -26,11 +26,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         // Try refreshing the token using the httpOnly cookie
         const { accessToken } = await authApi.refresh();
+        if (!accessToken) { setLoading(false); return; }
         setAccessToken(accessToken);
 
-        // Fetch user profile
+        // Fetch user profile with permissions
         const user = await authApi.me();
-        setAuth(user, accessToken);
+        if (user) setAuth(user, accessToken);
+        else setLoading(false);
       } catch {
         // No valid refresh cookie — user needs to log in
         setLoading(false);

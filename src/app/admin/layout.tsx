@@ -8,6 +8,7 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import { PageSpinner } from '@/components/ui/spinner';
 import { useIdleLogout } from '@/lib/hooks/use-idle-logout';
 import { IdleWarning } from '@/components/idle-warning';
+// import { PageGuard } from '@/components/page-guard';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();

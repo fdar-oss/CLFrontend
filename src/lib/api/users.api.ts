@@ -20,4 +20,10 @@ export const usersApi = {
 
   deactivate: (id: string) =>
     api.patch(`/users/${id}/deactivate`).then((r) => r.data),
+
+  // Access Control
+  getAllPermissions: () => api.get('/users/access-control').then((r) => r.data),
+  getMyPermissions: () => api.get('/users/access-control/my').then((r) => r.data),
+  updatePermissions: (role: string, data: { allowedRoutes: string[]; allowedFeatures: string[] }) =>
+    api.patch(`/users/access-control/${role}`, data).then((r) => r.data),
 };
