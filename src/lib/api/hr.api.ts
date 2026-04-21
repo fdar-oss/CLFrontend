@@ -39,6 +39,30 @@ export const hrApi = {
   approveLeave: (id: string) => api.patch(`/hr/leaves/${id}/approve`).then((r) => r.data),
   rejectLeave: (id: string) => api.patch(`/hr/leaves/${id}/reject`).then((r) => r.data),
 
+  // Attendance extras
+  forgiveLateness: (attendanceId: string) =>
+    api.patch(`/hr/attendance/${attendanceId}/forgive`).then((r) => r.data),
+  getAttendanceSummary: (month: number, year: number) =>
+    api.get('/hr/attendance/summary', { params: { month, year } }).then((r) => r.data),
+
+  // Salary Advances
+  listAdvances: (params?: Record<string, unknown>) =>
+    api.get('/hr/advances', { params }).then((r) => r.data),
+  createAdvance: (data: { employeeId: string; amount: number; monthlyInstallment?: number; reason?: string; givenDate: string }) =>
+    api.post('/hr/advances', data).then((r) => r.data),
+
+  // Holiday Calendar
+  listHolidays: (year?: number) =>
+    api.get('/hr/holidays', { params: { year } }).then((r) => r.data),
+  createHoliday: (data: { date: string; name: string; overtimeRate?: number }) =>
+    api.post('/hr/holidays', data).then((r) => r.data),
+  deleteHoliday: (id: string) => api.delete(`/hr/holidays/${id}`).then((r) => r.data),
+
+  // Attendance Config
+  getAttendanceConfig: () => api.get('/hr/attendance-config').then((r) => r.data),
+  updateAttendanceConfig: (data: { allowedIPs?: string[]; gracePeriodMin?: number }) =>
+    api.patch('/hr/attendance-config', data).then((r) => r.data),
+
   // Shifts / Scheduling
   listShifts: (params?: Record<string, unknown>) =>
     api.get('/hr/shifts', { params }).then((r) => r.data),
