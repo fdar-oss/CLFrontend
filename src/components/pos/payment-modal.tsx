@@ -109,10 +109,10 @@ export function PaymentModal({
         notes: it.notes,
       }));
 
-  // Live tax calculation based on selected method — round to whole rupees
+  // Live tax calculation based on selected method
   const taxRate = taxRateFor(method);
-  const taxAmount = Math.round(effectiveSubtotal * taxRate);
-  const total = Math.round(effectiveSubtotal + taxAmount);
+  const taxAmount = parseFloat((effectiveSubtotal * taxRate).toFixed(2));
+  const total = parseFloat((effectiveSubtotal + taxAmount).toFixed(2));
 
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
   const remaining = Math.max(0, total - totalPaid);

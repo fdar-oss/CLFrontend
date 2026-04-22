@@ -2,11 +2,12 @@ import { format, formatDistanceToNow, parseISO } from 'date-fns';
 
 export function formatCurrency(amount: number | string | null | undefined): string {
   const num = Number(amount ?? 0);
+  const hasDecimals = num % 1 !== 0;
   return new Intl.NumberFormat('en-PK', {
     style: 'currency',
     currency: 'PKR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
   }).format(num);
 }
 

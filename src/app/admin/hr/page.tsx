@@ -1041,6 +1041,7 @@ function PayStubView({ entry, onClose }: { entry: any; onClose: () => void }) {
               <div className="space-y-1">
                 <div className="flex justify-between"><span>Base Salary</span><span className="font-medium">{formatCurrency(d.baseSalary)}</span></div>
                 {d.overtimePay > 0 && <div className="flex justify-between"><span>Overtime ({d.totalOvertimeHours}h)</span><span className="font-medium">{formatCurrency(d.overtimePay)}</span></div>}
+                {d.earnedPaidDays !== undefined && <div className="flex justify-between text-gray-500"><span>Paid Days Earned</span><span>{d.earnedPaidDays} of {d.paidOffDays}</span></div>}
                 {d.extraDaysPay > 0 && <div className="flex justify-between"><span>Unused Off Days ({d.unusedPaidDays} days)</span><span className="font-medium">{formatCurrency(d.extraDaysPay)}</span></div>}
                 <div className="flex justify-between font-bold border-t pt-1"><span>Gross Salary</span><span className="text-green-700">{formatCurrency(d.grossSalary)}</span></div>
               </div>
@@ -1051,6 +1052,7 @@ function PayStubView({ entry, onClose }: { entry: any; onClose: () => void }) {
               <div className="space-y-1">
                 {d.lateDeductions > 0 && <div className="flex justify-between text-red-600"><span>Late Deductions ({d.daysLate} days)</span><span>−{formatCurrency(d.lateDeductions)}</span></div>}
                 {d.absentDeductions > 0 && <div className="flex justify-between text-red-600"><span>Absent Deductions ({d.daysAbsent} days)</span><span>−{formatCurrency(d.absentDeductions)}</span></div>}
+                {d.unearnedLeaveDeduction > 0 && <div className="flex justify-between text-red-600"><span>Unearned Leave Taken ({d.unearnedLeaveTaken} days)</span><span>−{formatCurrency(d.unearnedLeaveDeduction)}</span></div>}
                 {d.advanceDeduction > 0 && <div className="flex justify-between text-red-600"><span>Advance Recovery</span><span>−{formatCurrency(d.advanceDeduction)}</span></div>}
                 <div className="flex justify-between font-bold border-t pt-1"><span>Total Deductions</span><span className="text-red-700">−{formatCurrency(d.totalDeductions)}</span></div>
               </div>

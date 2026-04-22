@@ -8,7 +8,7 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import {
   LayoutDashboard, GitBranch, Users, UtensilsCrossed, Package,
   ShoppingCart, UserCheck, DollarSign, Heart, Megaphone,
-  Receipt, Monitor, BarChart3, Shield,
+  Receipt, Monitor, BarChart3, Shield, Activity,
 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/use-permissions';
 
@@ -56,6 +56,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { label: 'Branches', href: '/admin/branches', icon: GitBranch },
       { label: 'Users', href: '/admin/users', icon: Users },
       { label: 'Access Control', href: '/admin/access-control', icon: Shield },
+      { label: 'Activity Log', href: '/admin/activity-log', icon: Activity },
     ],
   },
 ];

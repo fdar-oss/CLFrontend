@@ -40,6 +40,16 @@ export const inventoryApi = {
   createLocation: (branchId: string, name: string, isDefault = false) =>
     api.post<StockLocation>('/inventory/locations', { branchId, name, isDefault }).then((r) => r.data),
 
+  // Stock Batches (FIFO)
+  getBatches: (stockItemId: string) =>
+    api.get(`/inventory/stock-items/${stockItemId}/batches`).then((r) => r.data),
+  addBatch: (stockItemId: string, data: { brandName: string; packSize: number; packUnit?: string; purchasePrice: number; supplier?: string; receivedDate: string; expiryDate?: string; notes?: string }) =>
+    api.post(`/inventory/stock-items/${stockItemId}/batches`, data).then((r) => r.data),
+  updateBatch: (id: string, data: any) =>
+    api.patch(`/inventory/batches/${id}`, data).then((r) => r.data),
+  deleteBatch: (id: string) =>
+    api.delete(`/inventory/batches/${id}`).then((r) => r.data),
+
   // Cost Analysis
   getCostAnalysis: () => api.get('/inventory/cost-analysis').then((r) => r.data),
 

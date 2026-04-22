@@ -14,8 +14,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { PageSpinner } from '@/components/ui/spinner';
-import { Plus, AlertTriangle, ChefHat, X, Package, Trash2, TrendingUp } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils/format';
+import { Plus, AlertTriangle, ChefHat, X, Package, Trash2, TrendingUp, Layers } from 'lucide-react';
+import { formatCurrency, formatDate } from '@/lib/utils/format';
 import { ingredientCost } from '@/lib/utils/units';
 import { menuApi } from '@/lib/api/menu.api';
 import type { StockItem, MenuItem } from '@/lib/types';
@@ -31,8 +31,74 @@ function StockItemsTab() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StockItem | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [batchBrand, setBatchBrand] = useState('');
+  const [batchSupplier, setBatchSupplier] = useState('');
+  const [batchPackSize, setBatchPackSize] = useState('');
+  const [batchPackUnit, setBatchPackUnit] = useState('bottle');
+  const [batchPrice, setBatchPrice] = useState('');
+  const [batchDate, setBatchDate] = useState(new Date().toISOString().slice(0, 10));
+  const [batchRemaining, setBatchRemaining] = useState('');
 
   const { data: items = [], isLoading } = useQuery({ queryKey: ['stock-items'], queryFn: inventoryApi.listItems });
+
+  const { data: editBatches = [] } = useQuery({
+    queryKey: ['batches', editing?.id],
+    queryFn: () => inventoryApi.getBatches(editing!.id),
+    enabled: !!editing?.id,
+  });
+
+  const addBatchMut = useMutation({
+    mutationFn: () => inventoryApi.addBatch(editing!.id, {
+      brandName: batchBrand, supplier: batchSupplier || undefined,
+      packSize: parseFloat(batchPackSize), packUnit: batchPackUnit,
+      purchasePrice: parseFloat(batchPrice), receivedDate: batchDate,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['batches'] });
+      qc.invalidateQueries({ queryKey: ['stock-items'] });
+      toast.success('Brand added');
+      setBatchOpen(false); setBatchBrand(''); setBatchSupplier(''); setBatchPackSize(''); setBatchPrice('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  const updateBatchMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => inventoryApi.updateBatch(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['batches'] }); qc.invalidateQueries({ queryKey: ['stock-items'] }); toast.success('Batch updated'); setEditingBatchId(null); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  const deleteBatchMut = useMutation({
+    mutationFn: inventoryApi.deleteBatch,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['batches'] }); qc.invalidateQueries({ queryKey: ['stock-items'] }); toast.success('Removed'); },
+  });
+
+  function startEditBatch(b: any) {
+    setEditingBatchId(b.id);
+    setBatchBrand(b.brandName);
+    setBatchSupplier(b.supplier || '');
+    setBatchPackSize(String(Number(b.packSize)));
+    setBatchPackUnit(b.packUnit || 'bottle');
+    setBatchPrice(String(Number(b.purchasePrice)));
+    setBatchRemaining(String(Number(b.remaining)));
+  }
+
+  function saveEditBatch() {
+    if (!editingBatchId) return;
+    updateBatchMut.mutate({
+      id: editingBatchId,
+      data: {
+        brandName: batchBrand,
+        supplier: batchSupplier || null,
+        packSize: parseFloat(batchPackSize),
+        packUnit: batchPackUnit,
+        purchasePrice: parseFloat(batchPrice),
+        remaining: parseFloat(batchRemaining),
+      },
+    });
+  }
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<{
     name: string; sku?: string; unit: string; minStockLevel?: number;
@@ -101,33 +167,50 @@ function StockItemsTab() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Recipe Unit</TableHead>
-              <TableHead>Purchased As</TableHead>
-              <TableHead>Pack Price</TableHead>
+              <TableHead>Active Brand</TableHead>
               <TableHead>Unit Cost</TableHead>
+              <TableHead>Batches</TableHead>
               <TableHead>Min Level</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 && <TableEmpty message="No stock items yet" />}
-            {items.map((item: any) => (
+            {items.map((item: any) => {
+              const activeBatch = item.batches?.find((b: any) => b.status === 'ACTIVE');
+              const batchCount = item.batches?.length ?? 0;
+              const totalRemaining = item.batches?.reduce((s: number, b: any) => s + Number(b.remaining || 0), 0) ?? 0;
+              return (
               <TableRow key={item.id} className="cursor-pointer" onClick={() => openEdit(item)}>
                 <TableCell className="font-medium">{item.name}</TableCell>
                 <TableCell className="text-gray-500">{item.unit}</TableCell>
-                <TableCell className="text-gray-500 text-sm">
-                  {item.packSize && item.packUnit
-                    ? `${item.packSize} ${item.unit} / ${item.packUnit}`
-                    : '—'}
+                <TableCell>
+                  {activeBatch ? (
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{activeBatch.brandName}</p>
+                      <p className="text-[10px] text-gray-400">{Number(activeBatch.remaining).toFixed(0)}{item.unit} left</p>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400 text-xs">No batch</span>
+                  )}
                 </TableCell>
-                <TableCell className="text-gray-500">{item.purchasePrice ? formatCurrency(item.purchasePrice) : '—'}</TableCell>
                 <TableCell className="font-medium text-brand-700">
                   {item.unitCost ? `₨${Number(item.unitCost).toFixed(2)}/${item.unit}` : '—'}
+                </TableCell>
+                <TableCell>
+                  {batchCount > 0 ? (
+                    <Badge variant="info">{batchCount} batch{batchCount !== 1 ? 'es' : ''}</Badge>
+                  ) : (
+                    <span className="text-gray-400 text-xs">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-gray-500">{item.minStockLevel ?? '—'} {item.unit}</TableCell>
                 <TableCell>
                   <Badge variant={item.isActive ? 'success' : 'secondary'}>{item.isActive ? 'Active' : 'Inactive'}</Badge>
                 </TableCell>
               </TableRow>
+              );
+            })}
             ))}
           </TableBody>
         </Table>
@@ -160,6 +243,98 @@ function StockItemsTab() {
               </div>
 
               <Input label={`Min Stock Level (${watch('unit') || 'units'})`} type="number" step="0.001" placeholder={`e.g. 5 ${watch('unit') || ''}`} {...register('minStockLevel', { valueAsNumber: true })} />
+
+              {/* Inline brand/batch tracking — only shown when editing */}
+              {editing && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Brands / Sourcing</p>
+                      <p className="text-[10px] text-gray-400">First one added = active. Next activates when current runs out.</p>
+                    </div>
+                    <button type="button" onClick={() => setBatchOpen(!batchOpen)} className="text-xs text-brand-600 hover:text-brand-800 font-medium">
+                      {batchOpen ? '− Cancel' : '+ Add brand'}
+                    </button>
+                  </div>
+
+                  {/* Current batches */}
+                  {(editBatches as any[]).filter((b: any) => b.status !== 'DEPLETED').length === 0 && !batchOpen && (
+                    <p className="text-xs text-gray-400 text-center py-3">No brands added yet</p>
+                  )}
+                  {(editBatches as any[]).filter((b: any) => b.status !== 'DEPLETED').map((b: any) => (
+                    editingBatchId === b.id ? (
+                      <div key={b.id} className="p-3 bg-white rounded-lg border border-brand-300 mb-1.5 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input value={batchBrand} onChange={(e) => setBatchBrand(e.target.value)} placeholder="Brand" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                          <input value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value)} placeholder="Supplier" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <input type="number" value={batchPackSize} onChange={(e) => setBatchPackSize(e.target.value)} placeholder="Pack size" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                          <input type="number" value={batchPrice} onChange={(e) => setBatchPrice(e.target.value)} placeholder="Price (₨)" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                          <input type="number" value={batchRemaining} onChange={(e) => setBatchRemaining(e.target.value)} placeholder="Remaining" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        </div>
+                        {batchPackSize && batchPrice && parseFloat(batchPackSize) > 0 && (
+                          <p className="text-[10px] text-brand-700">Unit cost: ₨{(parseFloat(batchPrice) / parseFloat(batchPackSize)).toFixed(4)}/{(editing as any)?.unit}</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setEditingBatchId(null)} className="flex-1 py-1 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                          <button type="button" onClick={saveEditBatch} className="flex-1 py-1 text-xs text-white bg-brand-600 rounded-lg hover:bg-brand-700">Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                    <div key={b.id} className={`flex items-center justify-between py-2 px-3 rounded-lg mb-1.5 ${b.status === 'ACTIVE' ? 'bg-green-50 border border-green-200' : 'bg-white border border-gray-200'}`}>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${b.status === 'ACTIVE' ? 'bg-green-600 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                          {b.status === 'ACTIVE' ? 'USING' : 'NEXT'}
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{b.brandName}</p>
+                          <p className="text-[10px] text-gray-400">
+                            {Number(b.remaining).toFixed(0)}{(editing as any)?.unit || ''} left · ₨{Number(b.unitCost).toFixed(2)}/{(editing as any)?.unit || 'unit'}
+                            {b.supplier ? ` · ${b.supplier}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => startEditBatch(b)} className="text-gray-400 hover:text-brand-600 p-1" title="Edit">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        </button>
+                        {b.status !== 'ACTIVE' && (
+                          <button type="button" onClick={() => deleteBatchMut.mutate(b.id)} className="text-gray-400 hover:text-red-500 p-1" title="Remove">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    )
+                  ))}
+
+                  {/* Add brand form */}
+                  {batchOpen && (
+                    <div className="mt-2 p-3 bg-white rounded-lg border border-gray-200 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={batchBrand} onChange={(e) => setBatchBrand(e.target.value)} placeholder="Brand name *" className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        <input value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value)} placeholder="Supplier (optional)" className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <input type="number" step="0.001" value={batchPackSize} onChange={(e) => setBatchPackSize(e.target.value)} placeholder={`Pack size (${(editing as any)?.unit})`} className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        <select value={batchPackUnit} onChange={(e) => setBatchPackUnit(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-3 py-1.5">
+                          {PACK_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                        <input type="number" step="0.01" value={batchPrice} onChange={(e) => setBatchPrice(e.target.value)} placeholder="Price (₨)" className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                      </div>
+                      {batchPackSize && batchPrice && parseFloat(batchPackSize) > 0 && (
+                        <p className="text-xs text-brand-700 font-medium">Unit cost: ₨{(parseFloat(batchPrice) / parseFloat(batchPackSize)).toFixed(4)} per {(editing as any)?.unit}</p>
+                      )}
+                      <input type="date" value={batchDate} onChange={(e) => setBatchDate(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-full focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                      <button type="button" onClick={() => batchBrand && batchPackSize && batchPrice && addBatchMut.mutate()} disabled={!batchBrand || !batchPackSize || !batchPrice}
+                        className="w-full py-1.5 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50">
+                        Add Brand
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </DialogBody>
             <DialogFooter>
               <Button variant="outline" type="button" onClick={closeDialog}>Cancel</Button>
@@ -933,6 +1108,170 @@ function PackagingRulesTab() {
             <DialogFooter>
               <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" loading={isSubmitting}>Create Rule</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Batches Tab ─────────────────────────────────────────────────────────────
+
+function BatchesTab() {
+  const qc = useQueryClient();
+  const [selectedItemId, setSelectedItemId] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const { data: stockItems = [] } = useQuery({ queryKey: ['stock-items'], queryFn: inventoryApi.listItems });
+  const { data: batches = [], isLoading } = useQuery({
+    queryKey: ['batches', selectedItemId],
+    queryFn: () => inventoryApi.getBatches(selectedItemId),
+    enabled: !!selectedItemId,
+  });
+
+  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<{
+    brandName: string; packSize: number; packUnit: string; purchasePrice: number;
+    supplier?: string; receivedDate: string; expiryDate?: string; notes?: string;
+  }>();
+
+  const packSize = watch('packSize');
+  const purchasePrice = watch('purchasePrice');
+  const computedCost = packSize && purchasePrice && packSize > 0 ? (purchasePrice / packSize).toFixed(4) : null;
+
+  const addMut = useMutation({
+    mutationFn: (data: any) => inventoryApi.addBatch(selectedItemId, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['batches'] }); qc.invalidateQueries({ queryKey: ['stock-items'] }); toast.success('Batch added'); setOpen(false); reset(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: inventoryApi.deleteBatch,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['batches'] }); qc.invalidateQueries({ queryKey: ['stock-items'] }); toast.success('Batch deleted'); },
+  });
+
+  const selectedItem = stockItems.find((s: any) => s.id === selectedItemId);
+  const activeBatch = (batches as any[]).find((b: any) => b.status === 'ACTIVE');
+  const totalRemaining = (batches as any[]).reduce((s: number, b: any) => s + Number(b.remaining || 0), 0);
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-4">
+        Track different brands/suppliers per stock item. Uses FIFO — oldest batch gets used first, then automatically switches to the next.
+      </p>
+
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 max-w-md">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Stock Item</label>
+          <select
+            value={selectedItemId}
+            onChange={(e) => setSelectedItemId(e.target.value)}
+            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="">Select a stock item…</option>
+            {stockItems.map((s: any) => (
+              <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
+            ))}
+          </select>
+        </div>
+        {selectedItemId && (
+          <>
+            <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-center">
+              <p className="text-xs text-gray-400">Total Stock</p>
+              <p className="text-lg font-bold text-gray-900">{totalRemaining.toFixed(1)} {selectedItem?.unit}</p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-center">
+              <p className="text-xs text-gray-400">Active Brand</p>
+              <p className="text-sm font-bold text-brand-700">{activeBatch?.brandName || 'None'}</p>
+            </div>
+            <Button onClick={() => { reset({ receivedDate: new Date().toISOString().slice(0, 10), packUnit: 'bottle' }); setOpen(true); }}>
+              <Plus className="w-4 h-4" /> Add Batch
+            </Button>
+          </>
+        )}
+      </div>
+
+      {selectedItemId && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Brand</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Pack</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Unit Cost</TableHead>
+                <TableHead>Received</TableHead>
+                <TableHead>Remaining</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading && <TableEmpty message="Loading…" />}
+              {!isLoading && batches.length === 0 && <TableEmpty message="No batches — add your first brand/purchase" />}
+              {(batches as any[]).map((b: any) => (
+                <TableRow key={b.id} className={b.status === 'ACTIVE' ? 'bg-green-50/50' : b.status === 'DEPLETED' ? 'opacity-50' : ''}>
+                  <TableCell>
+                    <Badge variant={b.status === 'ACTIVE' ? 'success' : b.status === 'WAITING' ? 'warning' : 'secondary'}>
+                      {b.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-semibold">{b.brandName}</TableCell>
+                  <TableCell className="text-gray-500 text-sm">{b.supplier || '—'}</TableCell>
+                  <TableCell className="text-sm text-gray-500">{Number(b.packSize)} {selectedItem?.unit}/{b.packUnit || 'pack'}</TableCell>
+                  <TableCell className="text-sm">{formatCurrency(b.purchasePrice)}</TableCell>
+                  <TableCell className="font-medium text-brand-700">₨{Number(b.unitCost).toFixed(2)}/{selectedItem?.unit}</TableCell>
+                  <TableCell className="text-sm text-gray-500">{formatDate(b.receivedDate)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold ${Number(b.remaining) <= 0 ? 'text-red-500' : 'text-gray-900'}`}>
+                        {Number(b.remaining).toFixed(1)}
+                      </span>
+                      <span className="text-xs text-gray-400">/ {Number(b.quantityReceived).toFixed(0)}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {b.status !== 'ACTIVE' && (
+                      <button onClick={() => deleteMut.mutate(b.id)} className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Batch — {selectedItem?.name}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit((d) => addMut.mutateAsync(d))}>
+            <DialogBody>
+              <Input label="Brand Name" placeholder="e.g. Heinz, Knorr, Prema" error={errors.brandName?.message} {...register('brandName', { required: 'Required' })} />
+              <Input label="Supplier (optional)" placeholder="e.g. Metro, Makro" {...register('supplier')} />
+              <div className="grid grid-cols-3 gap-3">
+                <Input label={`Pack Size (${selectedItem?.unit})`} type="number" step="0.001" placeholder="e.g. 1000" error={errors.packSize?.message} {...register('packSize', { required: 'Required', valueAsNumber: true })} />
+                <Select label="Pack Type" options={PACK_UNITS.map(u => ({ value: u, label: u }))} {...register('packUnit')} />
+                <Input label="Price per Pack (₨)" type="number" step="0.01" error={errors.purchasePrice?.message} {...register('purchasePrice', { required: 'Required', valueAsNumber: true })} />
+              </div>
+              {computedCost && (
+                <div className="bg-brand-50 border border-brand-200 rounded-lg px-3 py-2 flex justify-between items-center">
+                  <span className="text-xs text-brand-800">Unit Cost</span>
+                  <span className="font-bold text-brand-700">₨{computedCost} per {selectedItem?.unit}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Received Date" type="date" {...register('receivedDate', { required: 'Required' })} />
+                <Input label="Expiry Date (optional)" type="date" {...register('expiryDate')} />
+              </div>
+              <Input label="Notes (optional)" placeholder="e.g. Batch #1234" {...register('notes')} />
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" loading={isSubmitting}>Add Batch</Button>
             </DialogFooter>
           </form>
         </DialogContent>

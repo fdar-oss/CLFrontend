@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/admin/page-header';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PageSpinner } from '@/components/ui/spinner';
-import { Shield, Save, Check } from 'lucide-react';
+import { Shield, Save } from 'lucide-react';
 
 const ROUTE_LABELS: Record<string, string> = {
   '/admin/dashboard': 'Dashboard',
@@ -24,6 +24,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/fbr': 'FBR',
   '/admin/branches': 'Branches',
   '/admin/users': 'Users',
+  '/admin/access-control': 'Access Control',
+  '/admin/activity-log': 'Activity Log',
   '/pos': 'POS Home',
   '/pos/terminal': 'POS Terminal',
   '/pos/tables': 'Tables',
@@ -56,20 +58,20 @@ const FEATURE_LABELS: Record<string, string> = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  TENANT_OWNER: 'Owner (Admin)',
+  TENANT_OWNER: 'Owner',
   MANAGER: 'Manager',
   CASHIER: 'Cashier',
   WAITER: 'Waiter',
   CHEF: 'Chef',
-  INVENTORY_STAFF: 'Inventory Staff',
-  HR_MANAGER: 'HR Manager',
-  FINANCE_MANAGER: 'Finance Manager',
-  MARKETING_MANAGER: 'Marketing Manager',
+  INVENTORY_STAFF: 'Inventory',
+  HR_MANAGER: 'HR',
+  FINANCE_MANAGER: 'Finance',
+  MARKETING_MANAGER: 'Marketing',
 };
 
 export default function AccessControlPage() {
   const qc = useQueryClient();
-  const [selectedRole, setSelectedRole] = useState('MANAGER');
+  const [selectedUserId, setSelectedUserId] = useState('');
   const [routes, setRoutes] = useState<string[]>([]);
   const [features, setFeatures] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -81,23 +83,25 @@ export default function AccessControlPage() {
 
   const allRoutes: string[] = data?.allRoutes ?? [];
   const allFeatures: string[] = data?.allFeatures ?? [];
-  const roles: any[] = data?.roles ?? [];
+  const users: any[] = data?.users ?? [];
 
-  // Load selected role's permissions
+  const selectedUser = users.find((u: any) => u.id === selectedUserId);
+  const isMainAdmin = selectedUser?.isMainAdmin;
+
+  // Load selected user's permissions
   useEffect(() => {
-    const rolePerm = roles.find((r: any) => r.role === selectedRole);
-    if (rolePerm) {
-      setRoutes(rolePerm.allowedRoutes);
-      setFeatures(rolePerm.allowedFeatures);
+    if (selectedUser) {
+      setRoutes(selectedUser.allowedRoutes || []);
+      setFeatures(selectedUser.allowedFeatures || []);
       setDirty(false);
     }
-  }, [selectedRole, data]);
+  }, [selectedUserId, data]);
 
   const saveMut = useMutation({
-    mutationFn: () => usersApi.updatePermissions(selectedRole, { allowedRoutes: routes, allowedFeatures: features }),
+    mutationFn: () => usersApi.updateUserPermissions(selectedUserId, { allowedRoutes: routes, allowedFeatures: features }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['access-control'] });
-      toast.success(`Permissions saved for ${ROLE_LABELS[selectedRole]}`);
+      toast.success(`Permissions saved for ${selectedUser?.fullName}`);
       setDirty(false);
     },
     onError: () => toast.error('Failed to save'),
@@ -127,138 +131,132 @@ export default function AccessControlPage() {
 
   if (isLoading) return <PageSpinner />;
 
-  const isOwner = selectedRole === 'TENANT_OWNER';
-
   return (
     <div>
       <PageHeader
         title="Access Control"
-        description="Manage what each role can see and do"
+        description="Manage what each user can see and do — per person"
         action={
-          <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!dirty || isOwner}>
+          <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!dirty || !selectedUserId || isMainAdmin}>
             <Save className="w-4 h-4" /> Save Changes
           </Button>
         }
       />
 
-      {/* Role selector */}
+      {/* User selector */}
       <div className="flex items-center gap-4 mb-6">
-        <div className="flex-1 max-w-sm">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Select Role</label>
+        <div className="flex-1 max-w-md">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Select User</label>
           <select
-            value={selectedRole}
-            onChange={(e) => setSelectedRole(e.target.value)}
+            value={selectedUserId}
+            onChange={(e) => setSelectedUserId(e.target.value)}
             className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
           >
-            {roles.map((r: any) => (
-              <option key={r.role} value={r.role}>
-                {ROLE_LABELS[r.role] || r.role} — {r.allowedRoutes.length} pages, {r.allowedFeatures.length} features
+            <option value="">Choose a user to configure…</option>
+            {users.map((u: any) => (
+              <option key={u.id} value={u.id}>
+                {u.fullName} — {ROLE_LABELS[u.role] || u.role} ({u.email}) · {u.allowedRoutes.length} pages
               </option>
             ))}
           </select>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-center">
-          <p className="text-xs text-gray-400">Pages</p>
-          <p className="text-lg font-bold text-brand-700">{routes.length}<span className="text-xs text-gray-400 font-normal">/{allRoutes.length}</span></p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-center">
-          <p className="text-xs text-gray-400">Features</p>
-          <p className="text-lg font-bold text-brand-700">{features.length}<span className="text-xs text-gray-400 font-normal">/{allFeatures.length}</span></p>
-        </div>
+        {selectedUserId && (
+          <>
+            <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-center">
+              <p className="text-xs text-gray-400">Pages</p>
+              <p className="text-lg font-bold text-brand-700">{routes.length}<span className="text-xs text-gray-400 font-normal">/{allRoutes.length}</span></p>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-center">
+              <p className="text-xs text-gray-400">Features</p>
+              <p className="text-lg font-bold text-brand-700">{features.length}<span className="text-xs text-gray-400 font-normal">/{allFeatures.length}</span></p>
+            </div>
+          </>
+        )}
       </div>
 
-      {isOwner && (
+      {!selectedUserId && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-12 text-center text-gray-400">
+          <Shield className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+          <p className="text-sm">Select a user above to manage their access</p>
+        </div>
+      )}
+
+      {selectedUserId && isMainAdmin && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 text-sm text-green-800">
           <Shield className="w-4 h-4 inline mr-2" />
-          Owner (Admin) always has full access to everything. These permissions cannot be modified.
+          This is the main admin account — full access to everything. Cannot be modified.
         </div>
       )}
 
-      {!isOwner && (
-        <div className="flex gap-2 mb-4">
-          <button onClick={selectAll} className="text-xs text-brand-600 hover:text-brand-800 font-medium underline">Select all</button>
-          <button onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 font-medium underline">Clear all</button>
-          {dirty && <Badge variant="warning">Unsaved changes</Badge>}
-        </div>
+      {selectedUserId && !isMainAdmin && (
+        <>
+          <div className="flex gap-2 mb-4">
+            <button onClick={selectAll} className="text-xs text-brand-600 hover:text-brand-800 font-medium underline">Select all</button>
+            <button onClick={clearAll} className="text-xs text-red-500 hover:text-red-700 font-medium underline">Clear all</button>
+            {dirty && <Badge variant="warning">Unsaved changes</Badge>}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Page Access */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
+                <h3 className="font-semibold text-gray-900 text-sm">Page Access</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Which pages this user can see</p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {allRoutes.map(route => {
+                  const checked = routes.includes(route);
+                  const isAdmin = route.startsWith('/admin');
+                  return (
+                    <label key={route} className="flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${isAdmin ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                          {isAdmin ? 'ADMIN' : 'POS'}
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">{ROUTE_LABELS[route] || route}</span>
+                      </div>
+                      <div className="relative">
+                        <input type="checkbox" checked={checked} onChange={() => toggleRoute(route)} className="sr-only" />
+                        <div className={`w-9 h-5 rounded-full transition-colors ${checked ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${checked ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Feature Access */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
+                <h3 className="font-semibold text-gray-900 text-sm">Feature Access</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Specific actions this user can perform</p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {allFeatures.map(feature => {
+                  const checked = features.includes(feature);
+                  const category = feature.split('.')[0];
+                  return (
+                    <label key={feature} className="flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-mono uppercase">{category}</span>
+                        <span className="text-sm text-gray-900">{FEATURE_LABELS[feature] || feature}</span>
+                      </div>
+                      <div className="relative">
+                        <input type="checkbox" checked={checked} onChange={() => toggleFeature(feature)} className="sr-only" />
+                        <div className={`w-9 h-5 rounded-full transition-colors ${checked ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${checked ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </>
       )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Page Access */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900 text-sm">Page Access</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Which pages this role can see in the sidebar</p>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {allRoutes.map(route => {
-              const checked = routes.includes(route);
-              const isAdmin = route.startsWith('/admin');
-              return (
-                <label
-                  key={route}
-                  className={`flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${isOwner ? 'opacity-60 pointer-events-none' : ''}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${isAdmin ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                      {isAdmin ? 'ADMIN' : 'POS'}
-                    </span>
-                    <span className="text-sm font-medium text-gray-900">{ROUTE_LABELS[route] || route}</span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      checked={isOwner || checked}
-                      onChange={() => toggleRoute(route)}
-                      disabled={isOwner}
-                      className="sr-only"
-                    />
-                    <div className={`w-9 h-5 rounded-full transition-colors ${isOwner || checked ? 'bg-green-500' : 'bg-gray-300'}`}>
-                      <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${isOwner || checked ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
-                    </div>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Feature Access */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900 text-sm">Feature Access</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Specific actions this role can perform</p>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {allFeatures.map(feature => {
-              const checked = features.includes(feature);
-              const category = feature.split('.')[0];
-              return (
-                <label
-                  key={feature}
-                  className={`flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${isOwner ? 'opacity-60 pointer-events-none' : ''}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-mono uppercase">{category}</span>
-                    <span className="text-sm text-gray-900">{FEATURE_LABELS[feature] || feature}</span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      checked={isOwner || checked}
-                      onChange={() => toggleFeature(feature)}
-                      disabled={isOwner}
-                      className="sr-only"
-                    />
-                    <div className={`w-9 h-5 rounded-full transition-colors ${isOwner || checked ? 'bg-green-500' : 'bg-gray-300'}`}>
-                      <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${isOwner || checked ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
-                    </div>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
