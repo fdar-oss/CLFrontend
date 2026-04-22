@@ -211,7 +211,6 @@ function StockItemsTab() {
               </TableRow>
               );
             })}
-            ))}
           </TableBody>
         </Table>
       </div>
