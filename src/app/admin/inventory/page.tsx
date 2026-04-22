@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { PageSpinner } from '@/components/ui/spinner';
-import { Plus, AlertTriangle, ChefHat, X, Package, Trash2, TrendingUp, Layers } from 'lucide-react';
+import { Plus, AlertTriangle, ChefHat, X, Package, Trash2, TrendingUp, Layers, Beaker, Play } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils/format';
 import { ingredientCost } from '@/lib/utils/units';
 import { menuApi } from '@/lib/api/menu.api';
@@ -1279,6 +1279,223 @@ function BatchesTab() {
   );
 }
 
+// ─── Prep Recipes Tab (house-made sauces/dressings) ──────────────────────────
+
+type PrepIngRow = { stockItemId: string; quantity: number; unit: string };
+
+function PrepRecipesTab() {
+  const qc = useQueryClient();
+  const { activeBranch } = useBranchStore();
+  const [selectedItemId, setSelectedItemId] = useState('');
+  const [ingredients, setIngredients] = useState<PrepIngRow[]>([]);
+  const [batchYield, setBatchYield] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const { data: stockItems = [] } = useQuery({ queryKey: ['stock-items'], queryFn: inventoryApi.listItems });
+  const { data: locations = [] } = useQuery({
+    queryKey: ['stock-locations', activeBranch?.id],
+    queryFn: () => inventoryApi.getLocations(activeBranch!.id),
+    enabled: !!activeBranch?.id,
+  });
+
+  const { data: prepRecipe } = useQuery({
+    queryKey: ['prep-recipe', selectedItemId],
+    queryFn: () => inventoryApi.getPrepRecipe(selectedItemId),
+    enabled: !!selectedItemId,
+  });
+
+  // Auto-load when item or recipe changes
+  useEffect(() => {
+    if (prepRecipe && prepRecipe.ingredients) {
+      setIngredients(prepRecipe.ingredients.map((i: any) => ({
+        stockItemId: i.stockItemId, quantity: Number(i.quantity), unit: i.unit,
+      })));
+      setBatchYield(String(Number(prepRecipe.yield)));
+      setNotes(prepRecipe.notes || '');
+    } else if (prepRecipe === null) {
+      setIngredients([]);
+      setBatchYield('');
+      setNotes('');
+    }
+  }, [prepRecipe, selectedItemId]);
+
+  const saveMut = useMutation({
+    mutationFn: () => inventoryApi.upsertPrepRecipe(selectedItemId, {
+      yield: parseFloat(batchYield), notes,
+      ingredients: ingredients.filter(i => i.stockItemId && i.quantity > 0),
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['prep-recipe'] }); qc.invalidateQueries({ queryKey: ['stock-items'] }); toast.success('Prep recipe saved'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  const produceMut = useMutation({
+    mutationFn: () => {
+      const loc = locations[0];
+      if (!loc) { toast.error('No stock location — create one in Stock Balances first'); throw new Error('No location'); }
+      return inventoryApi.producePrep(selectedItemId, loc.id, 1);
+    },
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['stock-items'] });
+      qc.invalidateQueries({ queryKey: ['batches'] });
+      toast.success(`Produced ${res.produced} units — Unit cost: ₨${res.unitCost}`);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Production failed'),
+  });
+
+  const selectedItem = stockItems.find((s: any) => s.id === selectedItemId);
+  const houseMadeItems = stockItems.filter((s: any) => s.isHouseMade);
+  const rawItems = stockItems.filter((s: any) => !s.isHouseMade);
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-4">
+        Define how house-made items (sauces, dressings, mixes) are produced from raw ingredients. Click "Make a Batch" to deduct ingredients and add the produced item to stock.
+      </p>
+
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 max-w-md">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Stock Item (house-made)</label>
+          <select
+            value={selectedItemId}
+            onChange={(e) => { setSelectedItemId(e.target.value); setIngredients([]); }}
+            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="">Select or search a stock item…</option>
+            {houseMadeItems.length > 0 && (
+              <optgroup label="House-Made Items">
+                {houseMadeItems.map((s: any) => <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>)}
+              </optgroup>
+            )}
+            <optgroup label="All Stock Items">
+              {stockItems.map((s: any) => <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>)}
+            </optgroup>
+          </select>
+        </div>
+        {selectedItemId && prepRecipe && (
+          <Button onClick={() => produceMut.mutate()} loading={produceMut.isPending} className="h-11">
+            <Play className="w-4 h-4" /> Make a Batch
+          </Button>
+        )}
+      </div>
+
+      {selectedItemId && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="font-semibold text-gray-900">Production Recipe — {selectedItem?.name}</h3>
+              <p className="text-xs text-gray-500">What raw ingredients are needed to make one batch</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setIngredients(prev => [...prev, { stockItemId: '', quantity: 0, unit: 'g' }])}>
+              <Plus className="w-3 h-3" /> Add ingredient
+            </Button>
+          </div>
+
+          <div className="mb-4">
+            <Input
+              label={`Batch Yield (${selectedItem?.unit || 'units'} produced per batch)`}
+              type="number" step="0.001" value={batchYield}
+              onChange={(e) => setBatchYield(e.target.value)}
+              placeholder={`e.g. 200 ${selectedItem?.unit || ''}`}
+            />
+          </div>
+
+          {ingredients.length === 0 ? (
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-sm text-gray-400">
+              No ingredients yet. Click <span className="font-semibold">Add ingredient</span> to define what goes into this item.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">
+                <div className="col-span-6">Raw Ingredient</div>
+                <div className="col-span-3">Quantity</div>
+                <div className="col-span-2">Unit</div>
+                <div className="col-span-1"></div>
+              </div>
+              {ingredients.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                  <select
+                    value={row.stockItemId}
+                    onChange={(e) => {
+                      const si = stockItems.find((s: any) => s.id === e.target.value);
+                      const updated = [...ingredients];
+                      updated[idx] = { ...updated[idx], stockItemId: e.target.value, unit: si?.unit || row.unit };
+                      setIngredients(updated);
+                    }}
+                    className="col-span-6 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Select…</option>
+                    {rawItems.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <input type="number" step="0.001" value={row.quantity}
+                    onChange={(e) => { const u = [...ingredients]; u[idx] = { ...u[idx], quantity: parseFloat(e.target.value) || 0 }; setIngredients(u); }}
+                    className="col-span-3 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  <select value={row.unit} onChange={(e) => { const u = [...ingredients]; u[idx] = { ...u[idx], unit: e.target.value }; setIngredients(u); }}
+                    className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <button onClick={() => setIngredients(prev => prev.filter((_, i) => i !== idx))} className="col-span-1 text-gray-400 hover:text-red-500 flex justify-center">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Cost preview */}
+          {ingredients.filter(r => r.stockItemId && r.quantity > 0).length > 0 && batchYield && parseFloat(batchYield) > 0 && (() => {
+            const lines = ingredients.filter(r => r.stockItemId && r.quantity > 0).map(r => {
+              const si = stockItems.find((s: any) => s.id === r.stockItemId);
+              const unitCostVal = Number(si?.unitCost ?? 0);
+              const stockUnit = si?.unit || r.unit;
+              const cost = ingredientCost(r.quantity, r.unit, stockUnit, unitCostVal);
+              return { name: si?.name || '?', qty: r.quantity, unit: r.unit, cost };
+            });
+            const totalCost = lines.reduce((s, l) => s + l.cost, 0);
+            const yieldNum = parseFloat(batchYield);
+            const costPerUnit = yieldNum > 0 ? totalCost / yieldNum : 0;
+
+            return (
+              <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Batch Cost Preview</p>
+                {lines.map((l, i) => (
+                  <div key={i} className="flex justify-between text-sm">
+                    <span className="text-gray-600">{l.name} ({l.qty}{l.unit})</span>
+                    <span className="font-medium">{formatCurrency(l.cost)}</span>
+                  </div>
+                ))}
+                <div className="border-t border-gray-300 mt-2 pt-2 space-y-1">
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Total Batch Cost</span>
+                    <span className="text-brand-700">{formatCurrency(totalCost)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Yield</span>
+                    <span>{yieldNum} {selectedItem?.unit}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Cost per {selectedItem?.unit}</span>
+                    <span className="text-brand-700">₨{costPerUnit.toFixed(4)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="mt-4">
+            <Input label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Blend for 2 min, refrigerate" />
+          </div>
+
+          <div className="flex justify-end mt-4">
+            <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending} disabled={ingredients.length === 0 || !batchYield}>
+              Save Prep Recipe
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function InventoryPage() {
@@ -1293,6 +1510,7 @@ export default function InventoryPage() {
           <TabsTrigger value="balances">Stock Balances</TabsTrigger>
           <TabsTrigger value="items">Stock Items</TabsTrigger>
           <TabsTrigger value="recipes"><ChefHat className="w-4 h-4 mr-1.5" /> Recipes</TabsTrigger>
+          <TabsTrigger value="prep"><Beaker className="w-4 h-4 mr-1.5" /> Prep Recipes</TabsTrigger>
           <TabsTrigger value="cost"><TrendingUp className="w-4 h-4 mr-1.5" /> Cost Analysis</TabsTrigger>
           <TabsTrigger value="packaging"><Package className="w-4 h-4 mr-1.5" /> Packaging Rules</TabsTrigger>
           <TabsTrigger value="alerts">
@@ -1302,6 +1520,7 @@ export default function InventoryPage() {
         <TabsContent value="balances"><BalancesTab /></TabsContent>
         <TabsContent value="items"><StockItemsTab /></TabsContent>
         <TabsContent value="recipes"><RecipesTab /></TabsContent>
+        <TabsContent value="prep"><PrepRecipesTab /></TabsContent>
         <TabsContent value="cost"><CostAnalysisTab /></TabsContent>
         <TabsContent value="packaging"><PackagingRulesTab /></TabsContent>
         <TabsContent value="alerts"><AlertsTab /></TabsContent>

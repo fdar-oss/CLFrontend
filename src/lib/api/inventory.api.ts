@@ -50,6 +50,14 @@ export const inventoryApi = {
   deleteBatch: (id: string) =>
     api.delete(`/inventory/batches/${id}`).then((r) => r.data),
 
+  // Prep Recipes (house-made items)
+  getPrepRecipe: (stockItemId: string) =>
+    api.get(`/inventory/prep-recipes/${stockItemId}`).then((r) => r.data).catch(() => null),
+  upsertPrepRecipe: (stockItemId: string, data: { yield: number; notes?: string; ingredients: any[] }) =>
+    api.post(`/inventory/prep-recipes/${stockItemId}`, data).then((r) => r.data),
+  producePrep: (stockItemId: string, locationId: string, batches = 1) =>
+    api.post(`/inventory/prep-recipes/${stockItemId}/produce`, { locationId, batches }).then((r) => r.data),
+
   // Cost Analysis
   getCostAnalysis: () => api.get('/inventory/cost-analysis').then((r) => r.data),
 
