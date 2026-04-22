@@ -132,7 +132,11 @@ export interface RestaurantTable {
   capacity: number;
   status: string;
   isActive: boolean;
+  occupiedSince?: string | null;
+  currentOrderId?: string | null;
+  servedBy?: string | null;
   posOrders?: PosOrder[];
+  reservations?: any[];
 }
 
 export interface PosShift {
