@@ -26,12 +26,14 @@ interface PosState {
   servedById: string | null;
   currentOrderId: string | null;
   discount: { type: 'PERCENT' | 'FLAT'; value: number; reason: string } | null;
+  orderTakerId: string | null;
   setOrderType: (type: string) => void;
   setSelectedTable: (table: RestaurantTable | null) => void;
   setCustomerId: (id: string | null) => void;
   setServedById: (id: string | null) => void;
   setCurrentOrderId: (id: string | null) => void;
   setDiscount: (d: { type: 'PERCENT' | 'FLAT'; value: number; reason: string } | null) => void;
+  setOrderTakerId: (id: string | null) => void;
 
   // Cart
   cart: CartItem[];
@@ -60,12 +62,14 @@ export const usePosStore = create<PosState>((set, get) => ({
   servedById: null,
   currentOrderId: null,
   discount: null,
+  orderTakerId: null,
   setOrderType: (orderType) => set({ orderType }),
   setSelectedTable: (selectedTable) => set({ selectedTable }),
   setCustomerId: (customerId) => set({ customerId }),
   setServedById: (servedById) => set({ servedById }),
   setCurrentOrderId: (currentOrderId) => set({ currentOrderId }),
   setDiscount: (discount) => set({ discount }),
+  setOrderTakerId: (orderTakerId) => set({ orderTakerId }),
 
   cart: [],
 
@@ -110,7 +114,7 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   clearCart: () =>
-    set({ cart: [], selectedTable: null, customerId: null, servedById: null, currentOrderId: null, discount: null, orderType: 'DINE_IN' }),
+    set({ cart: [], selectedTable: null, customerId: null, servedById: null, currentOrderId: null, discount: null, orderTakerId: null, orderType: 'DINE_IN' }),
 
   cartTotal: () => {
     const { cart } = get();

@@ -38,6 +38,7 @@ interface PaymentModalProps {
   tableId?: string;
   customerId?: string | null;
   servedById?: string | null;
+  orderTakerId?: string | null;
   /** If provided, payment is processed against this existing order — no new order is created. */
   existingOrderId?: string | null;
   cartItems: CartItem[];
@@ -48,7 +49,7 @@ interface PaymentModalProps {
 }
 
 export function PaymentModal({
-  branchId, orderType, tableId, customerId, servedById, existingOrderId,
+  branchId, orderType, tableId, customerId, servedById, orderTakerId, existingOrderId,
   cartItems, subtotal, discount, onSuccess, onClose,
 }: PaymentModalProps) {
   const clearCart = usePosStore((s) => s.clearCart);
@@ -143,6 +144,7 @@ export function PaymentModal({
           tableId,
           customerId: customerId || undefined,
           servedById: servedById || undefined,
+          orderTakerId: orderTakerId || undefined,
           paymentMethod: method,
           discount: discount ? { type: discount.type, value: discount.value, reason: discount.reason } : undefined,
           items: cartItems.map((item) => ({

@@ -19,6 +19,7 @@ export const posApi = {
     tableId?: string;
     customerId?: string;
     servedById?: string;
+    orderTakerId?: string;
     notes?: string;
     paymentMethod?: string;
     discount?: { type: string; value: number; reason: string };
@@ -43,6 +44,21 @@ export const posApi = {
 
   processRefund: (orderId: string, amount: number, reason: string, method: string) =>
     api.post(`/pos/orders/${orderId}/refund`, { amount, reason, method }).then((r) => r.data),
+
+  // Order Takers
+  listOrderTakers: () => api.get('/pos/order-takers').then((r) => r.data),
+  getCommissionSummary: (branchId?: string, date?: string) =>
+    api.get('/pos/commission-summary', { params: { branchId, date } }).then((r) => r.data),
+
+  // Void
+  requestVoid: (orderId: string, data: { orderItemId?: string; reason: string }) =>
+    api.post(`/pos/orders/${orderId}/void`, data).then((r) => r.data),
+  listVoidRequests: (status?: string) =>
+    api.get('/pos/void-requests', { params: { status } }).then((r) => r.data),
+  approveVoid: (requestId: string) =>
+    api.patch(`/pos/void-requests/${requestId}/approve`).then((r) => r.data),
+  rejectVoid: (requestId: string, rejectionNote?: string) =>
+    api.patch(`/pos/void-requests/${requestId}/reject`, { rejectionNote }).then((r) => r.data),
 
   // Tables
   listTables: (branchId: string) =>

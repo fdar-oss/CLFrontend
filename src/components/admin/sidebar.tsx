@@ -8,7 +8,7 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import {
   LayoutDashboard, GitBranch, Users, UtensilsCrossed, Package,
   ShoppingCart, UserCheck, DollarSign, Heart, Megaphone,
-  Receipt, Monitor, BarChart3, Shield, Activity,
+  Receipt, Monitor, BarChart3, Shield, Activity, Ban,
 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/use-permissions';
 
@@ -29,6 +29,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Operations',
     items: [
       { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
+      { label: 'Void Requests', href: '/admin/void-requests', icon: Ban },
       { label: 'Menu', href: '/admin/menu', icon: UtensilsCrossed },
       { label: 'Inventory', href: '/admin/inventory', icon: Package },
       { label: 'Procurement', href: '/admin/procurement', icon: Receipt },

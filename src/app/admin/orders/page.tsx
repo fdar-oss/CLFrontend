@@ -46,6 +46,9 @@ function OrderDetail({ order: listOrder, onClose }: { order: PosOrder; onClose: 
   const qc = useQueryClient();
   const { activeBranch } = useBranch();
   const [refundOpen, setRefundOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidItemId, setVoidItemId] = useState<string | null>(null);
   const [receiptMode, setReceiptMode] = useState<ReceiptMode | null>(null);
   const { register, handleSubmit, formState: { isSubmitting } } = useForm<{ amount: number; reason: string }>();
 
@@ -56,10 +59,16 @@ function OrderDetail({ order: listOrder, onClose }: { order: PosOrder; onClose: 
   });
   const order = fullOrder || listOrder;
 
-  const cancelMut = useMutation({
-    mutationFn: () => posApi.updateOrderStatus(order.id, 'CANCELLED'),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-orders'] }); toast.success('Order cancelled'); onClose(); },
-    onError: () => toast.error('Failed to cancel'),
+  const voidMut = useMutation({
+    mutationFn: () => posApi.requestVoid(order.id, { orderItemId: voidItemId || undefined, reason: voidReason }),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['admin-orders'] });
+      qc.invalidateQueries({ queryKey: ['order-detail'] });
+      toast.success(res.message || 'Void processed');
+      setVoidOpen(false); setVoidReason(''); setVoidItemId(null);
+      if (res.voided) onClose();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Void failed'),
   });
 
   const refundMut = useMutation({
@@ -115,9 +124,9 @@ function OrderDetail({ order: listOrder, onClose }: { order: PosOrder; onClose: 
           <div className="border border-gray-200 rounded-xl overflow-hidden mb-4">
             <div className="bg-gray-50 px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Items</div>
             <div className="divide-y divide-gray-100">
-              {order.orderItems?.map((item) => (
-                <div key={item.id} className="px-4 py-2.5 flex items-start justify-between">
-                  <div>
+              {order.orderItems?.map((item: any) => (
+                <div key={item.id} className="px-4 py-2.5 flex items-start justify-between group">
+                  <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">
                       <span className="text-brand-700 mr-1">{item.quantity}×</span>
                       {item.itemName}
@@ -127,7 +136,18 @@ function OrderDetail({ order: listOrder, onClose }: { order: PosOrder; onClose: 
                     )}
                     {item.notes && <p className="text-xs text-orange-500 mt-0.5 pl-4 italic">"{item.notes}"</p>}
                   </div>
-                  <span className="text-sm font-medium text-gray-900 shrink-0">{formatCurrency(item.lineTotal)}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(item.lineTotal)}</span>
+                    {isPending && order.orderItems.length > 1 && (
+                      <button
+                        onClick={() => { setVoidItemId(item.id); setVoidOpen(true); }}
+                        className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1 transition-opacity"
+                        title="Remove this item"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -167,6 +187,42 @@ function OrderDetail({ order: listOrder, onClose }: { order: PosOrder; onClose: 
                     <span className="font-bold text-green-800">{formatCurrency(p.amount)}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Void form */}
+          {voidOpen && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
+                {voidItemId ? 'Remove Item' : 'Void Entire Order'}
+              </p>
+              <select
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                className="w-full text-sm border border-amber-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="">Select a reason…</option>
+                <option value="Customer left without paying">Customer left without paying</option>
+                <option value="Customer changed mind">Customer changed mind</option>
+                <option value="Wrong order punched">Wrong order punched</option>
+                <option value="Item out of stock">Item out of stock</option>
+                <option value="Duplicate order">Duplicate order</option>
+                <option value="Other">Other</option>
+              </select>
+              {voidReason === 'Other' && (
+                <input
+                  value=""
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  placeholder="Enter reason…"
+                  className="w-full text-sm border border-amber-300 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => { setVoidOpen(false); setVoidItemId(null); setVoidReason(''); }}>Cancel</Button>
+                <Button variant="destructive" size="sm" onClick={() => voidReason && voidMut.mutate()} loading={voidMut.isPending} disabled={!voidReason}>
+                  {voidItemId ? 'Remove Item' : 'Void Order'}
+                </Button>
               </div>
             </div>
           )}
@@ -219,8 +275,8 @@ function OrderDetail({ order: listOrder, onClose }: { order: PosOrder; onClose: 
             )}
 
             <div className="flex-1" />
-            {isPending && (
-              <Button variant="destructive" onClick={() => cancelMut.mutate()} loading={cancelMut.isPending}>
+            {(isPending || order.status === 'COMPLETED') && !voidOpen && !refundOpen && (
+              <Button variant="destructive" onClick={() => { setVoidItemId(null); setVoidOpen(true); }}>
                 <Ban className="w-4 h-4" /> Void Order
               </Button>
             )}

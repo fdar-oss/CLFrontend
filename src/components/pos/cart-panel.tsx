@@ -7,6 +7,7 @@ import { usePosStore } from '@/lib/stores/pos.store';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { usersApi } from '@/lib/api/users.api';
 import { posApi } from '@/lib/api/pos.api';
+import { Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/utils/format';
 import { ShoppingCart, Plus, Minus, Trash2, ChevronDown, User as UserIcon, Percent, X } from 'lucide-react';
@@ -34,6 +35,7 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
     servedById, setServedById,
     currentOrderId, setCurrentOrderId,
     discount, setDiscount,
+    orderTakerId, setOrderTakerId,
     cartTotal, cartItemCount,
     clearCart,
   } = usePosStore();
@@ -42,6 +44,13 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
 
   const [tableOpen, setTableOpen] = useState(false);
   const [staffOpen, setStaffOpen] = useState(false);
+  const [takerOpen, setTakerOpen] = useState(false);
+
+  const { data: orderTakers = [] } = useQuery({
+    queryKey: ['order-takers'],
+    queryFn: posApi.listOrderTakers,
+  });
+  const selectedTaker = (orderTakers as any[]).find((t: any) => t.id === orderTakerId);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [discType, setDiscType] = useState<'PERCENT' | 'FLAT'>('PERCENT');
   const [discValue, setDiscValue] = useState('');
@@ -188,6 +197,38 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
                   >
                     <span>Table {t.number}{t.section ? ` — ${t.section}` : ''}</span>
                     <span className={`text-xs ${t.status === 'AVAILABLE' ? 'text-green-600' : 'text-orange-600'}`}>{t.status}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Order Taker (optional) */}
+        {(orderTakers as any[]).length > 0 && (
+          <div className="mt-2 relative">
+            <button
+              type="button"
+              onClick={() => setTakerOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 border border-gray-200 rounded-xl text-sm hover:border-brand-400 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Briefcase className="w-3.5 h-3.5 text-gray-400" />
+                <span className={selectedTaker ? 'text-gray-900 font-medium' : 'text-gray-400'}>
+                  {selectedTaker ? `Order Taker: ${selectedTaker.fullName}` : 'Direct order (no taker)'}
+                </span>
+              </span>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+            {takerOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-30 max-h-40 overflow-y-auto">
+                <button type="button" onClick={() => { setOrderTakerId(null); setTakerOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-50">Direct (no order taker)</button>
+                {(orderTakers as any[]).map((t: any) => (
+                  <button key={t.id} type="button" onClick={() => { setOrderTakerId(t.id); setTakerOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex justify-between">
+                    <span className="font-medium">{t.fullName}</span>
+                    <span className="text-xs text-gray-400">{Number(t.commissionRate || 10)}%</span>
                   </button>
                 ))}
               </div>
