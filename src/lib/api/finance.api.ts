@@ -34,4 +34,7 @@ export const financeApi = {
 
   getProfitLoss: (from: string, to: string, branchId?: string) =>
     api.get('/finance/reports/profit-loss', { params: { from, to, branchId } }).then((r) => r.data),
+
+  getEODReport: (date: string, branchId?: string) =>
+    api.get('/finance/reports/eod', { params: { date, branchId } }).then((r) => r.data),
 };

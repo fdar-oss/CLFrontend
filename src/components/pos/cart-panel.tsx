@@ -23,8 +23,9 @@ interface CartPanelProps {
 
 const STAFF_ROLES = new Set(['WAITER', 'CASHIER', 'MANAGER', 'TENANT_OWNER']);
 
-function modKey(mods: { modifierId: string }[]): string {
-  return mods.map((m) => m.modifierId).sort().join(',');
+function modKey(item: { modifiers: { modifierId: string }[]; variantId?: string }): string {
+  const mk = item.modifiers.map((m) => m.modifierId).sort().join(',');
+  return item.variantId ? `v:${item.variantId}|${mk}` : mk;
 }
 
 export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, tables = [] }: CartPanelProps) {
@@ -283,7 +284,7 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
         ) : !currentOrderId ? (
           <div className="divide-y divide-gray-50">
             {cart.map((item) => {
-              const key = modKey(item.modifiers);
+              const key = modKey(item);
               const modTotal = item.modifiers.reduce((s, m) => s + m.priceAdjustment, 0);
               const linePrice = (item.unitPrice + modTotal) * item.quantity;
 
