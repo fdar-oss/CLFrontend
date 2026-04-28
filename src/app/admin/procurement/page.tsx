@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -197,24 +197,28 @@ function PurchaseOrdersTab() {
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to receive'),
   });
 
+  const prevReceivePoRef = useRef<string | null>(null);
+
   function openReceive(poId: string) {
+    prevReceivePoRef.current = null;
     setReceivePoId(poId);
   }
 
   // Populate GRN lines when PO detail loads
-  const prevReceivePoRef = useState<string | null>(null);
-  if (receivePo && receivePoId && prevReceivePoRef[0] !== receivePoId) {
-    prevReceivePoRef[0] = receivePoId;
-    setGrnLines(receivePo.lines.map((l: any) => ({
-      stockItemId: l.stockItemId,
-      itemName: l.stockItem?.name || 'Unknown',
-      orderedQty: Number(l.quantity) - Number(l.receivedQty || 0),
-      receivedQty: Number(l.quantity) - Number(l.receivedQty || 0),
-      unitCost: Number(l.unitPrice),
-      batchNumber: '',
-      expiryDate: '',
-    })));
-  }
+  useEffect(() => {
+    if (receivePo && receivePoId && prevReceivePoRef.current !== receivePoId) {
+      prevReceivePoRef.current = receivePoId;
+      setGrnLines(receivePo.lines.map((l: any) => ({
+        stockItemId: l.stockItemId,
+        itemName: l.stockItem?.name || 'Unknown',
+        orderedQty: Number(l.quantity) - Number(l.receivedQty || 0),
+        receivedQty: Number(l.quantity) - Number(l.receivedQty || 0),
+        unitCost: Number(l.unitPrice),
+        batchNumber: '',
+        expiryDate: '',
+      })));
+    }
+  }, [receivePo, receivePoId]);
 
   function submitGrn() {
     if (!receivePoId || !locations[0]) return;
@@ -453,7 +457,7 @@ function PurchaseOrdersTab() {
       </Dialog>
 
       {/* Receive Goods (GRN) Dialog */}
-      <Dialog open={!!receivePoId} onOpenChange={(v) => { if (!v) { setReceivePoId(null); setGrnLines([]); prevReceivePoRef[0] = null; } }}>
+      <Dialog open={!!receivePoId} onOpenChange={(v) => { if (!v) { setReceivePoId(null); setGrnLines([]); prevReceivePoRef.current = null; } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Receive Goods — {receivePo?.poNumber}</DialogTitle></DialogHeader>
           <DialogBody>
@@ -494,7 +498,7 @@ function PurchaseOrdersTab() {
               className="mt-3 w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </DialogBody>
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => { setReceivePoId(null); setGrnLines([]); prevReceivePoRef[0] = null; }}>Cancel</Button>
+            <Button variant="outline" type="button" onClick={() => { setReceivePoId(null); setGrnLines([]); prevReceivePoRef.current = null; }}>Cancel</Button>
             <Button onClick={submitGrn} loading={receiveMut.isPending}>
               <PackageCheck className="w-4 h-4" /> Post GRN
             </Button>
