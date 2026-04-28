@@ -15,15 +15,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { PageSpinner } from '@/components/ui/spinner';
-import { Plus, CheckCircle, Trash2 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/utils/format';
+import { Plus, CheckCircle, Trash2, PackageCheck, Eye } from 'lucide-react';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils/format';
 import type { Vendor, PurchaseOrder } from '@/lib/types';
 
 const PO_STATUS_BADGE: Record<string, 'default' | 'secondary' | 'success' | 'destructive' | 'warning' | 'info'> = {
   DRAFT: 'secondary',
-  PENDING_APPROVAL: 'warning',
-  APPROVED: 'info',
-  PARTIALLY_RECEIVED: 'warning',
+  SENT: 'info',
+  PARTIAL: 'warning',
   RECEIVED: 'success',
   CANCELLED: 'destructive',
 };
@@ -136,14 +135,35 @@ function PurchaseOrdersTab() {
   const { activeBranch } = useBranchStore();
   const [open, setOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [receivePoId, setReceivePoId] = useState<string | null>(null);
+  const [viewPoId, setViewPoId] = useState<string | null>(null);
+  const [grnLines, setGrnLines] = useState<{ stockItemId: string; itemName: string; orderedQty: number; receivedQty: number; unitCost: number; batchNumber: string; expiryDate: string }[]>([]);
+  const [grnNotes, setGrnNotes] = useState('');
 
   const { data: pos = [], isLoading } = useQuery({
     queryKey: ['purchase-orders', activeBranch?.id, statusFilter],
     queryFn: () => procurementApi.listPOs({ branchId: activeBranch?.id, status: statusFilter || undefined }),
   });
 
+  const { data: viewPo } = useQuery<any>({
+    queryKey: ['po-detail', viewPoId],
+    queryFn: () => procurementApi.getPO(viewPoId!),
+    enabled: !!viewPoId,
+  });
+
+  const { data: receivePo } = useQuery<any>({
+    queryKey: ['po-detail', receivePoId],
+    queryFn: () => procurementApi.getPO(receivePoId!),
+    enabled: !!receivePoId,
+  });
+
   const { data: vendors = [] } = useQuery({ queryKey: ['vendors'], queryFn: procurementApi.listVendors });
   const { data: stockItems = [] } = useQuery({ queryKey: ['stock-items'], queryFn: inventoryApi.listItems });
+  const { data: locations = [] } = useQuery({
+    queryKey: ['stock-locations', activeBranch?.id],
+    queryFn: () => inventoryApi.getLocations(activeBranch!.id),
+    enabled: !!activeBranch?.id,
+  });
 
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<POFormData>({
     defaultValues: { lines: [{ stockItemId: '', quantity: 1, unit: 'kg', unitPrice: 0 }] },
@@ -159,11 +179,145 @@ function PurchaseOrdersTab() {
 
   const approveMut = useMutation({
     mutationFn: procurementApi.approvePO,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchase-orders'] }); toast.success('PO approved'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchase-orders'] }); toast.success('PO approved & sent'); },
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
   });
 
+  const receiveMut = useMutation({
+    mutationFn: (data: Parameters<typeof procurementApi.receiveGoods>[0]) => procurementApi.receiveGoods(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      qc.invalidateQueries({ queryKey: ['stock-items'] });
+      qc.invalidateQueries({ queryKey: ['batches'] });
+      toast.success('Goods received — stock updated');
+      setReceivePoId(null);
+      setGrnLines([]);
+      setGrnNotes('');
+    },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to receive'),
+  });
+
+  function openReceive(poId: string) {
+    setReceivePoId(poId);
+  }
+
+  // Populate GRN lines when PO detail loads
+  const prevReceivePoRef = useState<string | null>(null);
+  if (receivePo && receivePoId && prevReceivePoRef[0] !== receivePoId) {
+    prevReceivePoRef[0] = receivePoId;
+    setGrnLines(receivePo.lines.map((l: any) => ({
+      stockItemId: l.stockItemId,
+      itemName: l.stockItem?.name || 'Unknown',
+      orderedQty: Number(l.quantity) - Number(l.receivedQty || 0),
+      receivedQty: Number(l.quantity) - Number(l.receivedQty || 0),
+      unitCost: Number(l.unitPrice),
+      batchNumber: '',
+      expiryDate: '',
+    })));
+  }
+
+  function submitGrn() {
+    if (!receivePoId || !locations[0]) return;
+    const lines = grnLines.filter(l => l.receivedQty > 0).map(l => ({
+      stockItemId: l.stockItemId,
+      orderedQty: l.orderedQty,
+      receivedQty: l.receivedQty,
+      unitCost: l.unitCost,
+      batchNumber: l.batchNumber || undefined,
+      expiryDate: l.expiryDate || undefined,
+    }));
+    if (lines.length === 0) { toast.error('Enter received quantities'); return; }
+    receiveMut.mutate({
+      purchaseOrderId: receivePoId,
+      locationId: locations[0].id,
+      notes: grnNotes || undefined,
+      lines,
+    });
+  }
+
   if (isLoading) return <PageSpinner />;
+
+  // ─── PO Detail View ────────────────────────────────────────────────────────
+  if (viewPoId && viewPo) {
+    return (
+      <div>
+        <Button variant="outline" onClick={() => setViewPoId(null)} className="mb-4">← Back to list</Button>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold">{viewPo.poNumber}</h2>
+              <p className="text-sm text-gray-400">{viewPo.vendor?.name} · {formatDate(viewPo.createdAt)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={PO_STATUS_BADGE[viewPo.status] || 'secondary'}>{viewPo.status.replace(/_/g, ' ')}</Badge>
+              {(viewPo.status === 'SENT' || viewPo.status === 'PARTIAL') && (
+                <Button size="sm" onClick={() => { setViewPoId(null); openReceive(viewPo.id); }}>
+                  <PackageCheck className="w-3.5 h-3.5 mr-1" /> Receive Goods
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Line Items</h3>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Ordered</TableHead>
+                  <TableHead>Received</TableHead>
+                  <TableHead>Unit Price</TableHead>
+                  <TableHead>Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {viewPo.lines?.map((l: any) => (
+                  <TableRow key={l.id}>
+                    <TableCell className="font-medium">{l.stockItem?.name}</TableCell>
+                    <TableCell>{Number(l.quantity)} {l.unit}</TableCell>
+                    <TableCell className={Number(l.receivedQty) >= Number(l.quantity) ? 'text-green-700 font-medium' : 'text-orange-600 font-medium'}>
+                      {Number(l.receivedQty || 0)} {l.unit}
+                    </TableCell>
+                    <TableCell>{formatCurrency(l.unitPrice)}</TableCell>
+                    <TableCell className="font-semibold">{formatCurrency(Number(l.quantity) * Number(l.unitPrice))}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {viewPo.grns?.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Goods Received Notes</h3>
+              {viewPo.grns.map((grn: any) => (
+                <div key={grn.id} className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">{grn.grnNumber}</p>
+                    <p className="text-xs text-gray-400">{formatDateTime(grn.createdAt)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    {grn.lines?.map((gl: any) => (
+                      <div key={gl.id} className="flex justify-between text-sm">
+                        <span>{gl.stockItem?.name}</span>
+                        <span className="font-medium">{Number(gl.receivedQty)} @ {formatCurrency(gl.unitCost)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {viewPo.notes && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notes</h3>
+              <p className="text-sm text-gray-600">{viewPo.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -174,7 +328,7 @@ function PurchaseOrdersTab() {
           className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
         >
           <option value="">All Statuses</option>
-          {['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'].map((s) => (
+          {['DRAFT', 'SENT', 'PARTIAL', 'RECEIVED', 'CANCELLED'].map((s) => (
             <option key={s} value={s}>{s.replace('_', ' ')}</option>
           ))}
         </select>
@@ -200,21 +354,28 @@ function PurchaseOrdersTab() {
           <TableBody>
             {pos.length === 0 && <TableEmpty message="No purchase orders" />}
             {pos.map((po) => (
-              <TableRow key={po.id}>
+              <TableRow key={po.id} className="cursor-pointer" onClick={() => setViewPoId(po.id)}>
                 <TableCell className="font-mono font-medium text-sm">{po.poNumber}</TableCell>
                 <TableCell className="font-medium">{po.vendor.name}</TableCell>
                 <TableCell className="text-gray-500">{po._count?.lines ?? '—'}</TableCell>
                 <TableCell className="font-semibold">{formatCurrency(po.total)}</TableCell>
                 <TableCell className="text-gray-500 text-sm">{po.expectedDate ? formatDate(po.expectedDate) : '—'}</TableCell>
                 <TableCell>
-                  <Badge variant={PO_STATUS_BADGE[po.status] || 'secondary'}>{po.status.replace('_', ' ')}</Badge>
+                  <Badge variant={PO_STATUS_BADGE[po.status] || 'secondary'}>{po.status.replace(/_/g, ' ')}</Badge>
                 </TableCell>
                 <TableCell>
-                  {po.status === 'DRAFT' && (
-                    <Button size="sm" variant="outline" onClick={() => approveMut.mutate(po.id)} loading={approveMut.isPending}>
-                      <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
-                    </Button>
-                  )}
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    {po.status === 'DRAFT' && (
+                      <Button size="sm" variant="outline" onClick={() => approveMut.mutate(po.id)} loading={approveMut.isPending}>
+                        <CheckCircle className="w-3.5 h-3.5" /> Approve
+                      </Button>
+                    )}
+                    {(po.status === 'SENT' || po.status === 'PARTIAL') && (
+                      <Button size="sm" onClick={() => openReceive(po.id)}>
+                        <PackageCheck className="w-3.5 h-3.5" /> Receive
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -222,6 +383,7 @@ function PurchaseOrdersTab() {
         </Table>
       </div>
 
+      {/* Create PO Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>New Purchase Order</DialogTitle></DialogHeader>
@@ -287,6 +449,56 @@ function PurchaseOrdersTab() {
               <Button type="submit" loading={isSubmitting}>Create PO</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receive Goods (GRN) Dialog */}
+      <Dialog open={!!receivePoId} onOpenChange={(v) => { if (!v) { setReceivePoId(null); setGrnLines([]); prevReceivePoRef[0] = null; } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Receive Goods — {receivePo?.poNumber}</DialogTitle></DialogHeader>
+          <DialogBody>
+            {receivePo && (
+              <p className="text-sm text-gray-500 mb-4">Vendor: <strong>{receivePo.vendor?.name}</strong></p>
+            )}
+            <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
+              <div className="p-2 grid grid-cols-12 gap-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase">
+                <div className="col-span-3">Item</div>
+                <div className="col-span-2">Remaining</div>
+                <div className="col-span-2">Receiving</div>
+                <div className="col-span-2">Unit Cost</div>
+                <div className="col-span-3">Expiry</div>
+              </div>
+              {grnLines.map((line, idx) => (
+                <div key={idx} className="p-2 grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-3 text-sm font-medium">{line.itemName}</div>
+                  <div className="col-span-2 text-sm text-gray-500">{line.orderedQty}</div>
+                  <div className="col-span-2">
+                    <input type="number" step="0.001" value={line.receivedQty}
+                      onChange={(e) => { const arr = [...grnLines]; arr[idx].receivedQty = parseFloat(e.target.value) || 0; setGrnLines(arr); }}
+                      className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </div>
+                  <div className="col-span-2">
+                    <input type="number" step="0.01" value={line.unitCost}
+                      onChange={(e) => { const arr = [...grnLines]; arr[idx].unitCost = parseFloat(e.target.value) || 0; setGrnLines(arr); }}
+                      className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </div>
+                  <div className="col-span-3">
+                    <input type="date" value={line.expiryDate}
+                      onChange={(e) => { const arr = [...grnLines]; arr[idx].expiryDate = e.target.value; setGrnLines(arr); }}
+                      className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <input value={grnNotes} onChange={(e) => setGrnNotes(e.target.value)} placeholder="Notes (optional)"
+              className="mt-3 w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => { setReceivePoId(null); setGrnLines([]); prevReceivePoRef[0] = null; }}>Cancel</Button>
+            <Button onClick={submitGrn} loading={receiveMut.isPending}>
+              <PackageCheck className="w-4 h-4" /> Post GRN
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
