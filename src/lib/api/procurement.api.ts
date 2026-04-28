@@ -30,7 +30,7 @@ export const procurementApi = {
     purchaseOrderId: string;
     locationId: string;
     notes?: string;
-    lines: { stockItemId: string; orderedQty: number; receivedQty: number; unitCost: number; batchNumber?: string; expiryDate?: string }[];
+    lines: { stockItemId: string; orderedQty: number; receivedQty: number; unitCost: number; brandName?: string; batchNumber?: string; expiryDate?: string }[];
   }) => api.post('/procurement/grn', data).then((r) => r.data),
 
   // Vendor Invoices & Payments

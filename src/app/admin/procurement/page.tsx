@@ -137,7 +137,7 @@ function PurchaseOrdersTab() {
   const [statusFilter, setStatusFilter] = useState('');
   const [receivePoId, setReceivePoId] = useState<string | null>(null);
   const [viewPoId, setViewPoId] = useState<string | null>(null);
-  const [grnLines, setGrnLines] = useState<{ stockItemId: string; itemName: string; orderedQty: number; receivedQty: number; unitCost: number; batchNumber: string; expiryDate: string }[]>([]);
+  const [grnLines, setGrnLines] = useState<{ stockItemId: string; itemName: string; orderedQty: number; receivedQty: number; unitCost: number; brandName: string; batchNumber: string; expiryDate: string }[]>([]);
   const [grnNotes, setGrnNotes] = useState('');
 
   const { data: pos = [], isLoading } = useQuery({
@@ -214,6 +214,7 @@ function PurchaseOrdersTab() {
         orderedQty: Number(l.quantity) - Number(l.receivedQty || 0),
         receivedQty: Number(l.quantity) - Number(l.receivedQty || 0),
         unitCost: Number(l.unitPrice),
+        brandName: '',
         batchNumber: '',
         expiryDate: '',
       })));
@@ -227,6 +228,7 @@ function PurchaseOrdersTab() {
       orderedQty: l.orderedQty,
       receivedQty: l.receivedQty,
       unitCost: l.unitCost,
+      brandName: l.brandName || undefined,
       batchNumber: l.batchNumber || undefined,
       expiryDate: l.expiryDate || undefined,
     }));
@@ -466,16 +468,22 @@ function PurchaseOrdersTab() {
             )}
             <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
               <div className="p-2 grid grid-cols-12 gap-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase">
-                <div className="col-span-3">Item</div>
-                <div className="col-span-2">Remaining</div>
+                <div className="col-span-2">Item</div>
+                <div className="col-span-2">Brand</div>
+                <div className="col-span-1">Ordered</div>
                 <div className="col-span-2">Receiving</div>
                 <div className="col-span-2">Unit Cost</div>
                 <div className="col-span-3">Expiry</div>
               </div>
               {grnLines.map((line, idx) => (
                 <div key={idx} className="p-2 grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-3 text-sm font-medium">{line.itemName}</div>
-                  <div className="col-span-2 text-sm text-gray-500">{line.orderedQty}</div>
+                  <div className="col-span-2 text-sm font-medium truncate" title={line.itemName}>{line.itemName}</div>
+                  <div className="col-span-2">
+                    <input type="text" value={line.brandName} placeholder="Brand name"
+                      onChange={(e) => { const arr = [...grnLines]; arr[idx].brandName = e.target.value; setGrnLines(arr); }}
+                      className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </div>
+                  <div className="col-span-1 text-sm text-gray-500 text-center">{line.orderedQty}</div>
                   <div className="col-span-2">
                     <input type="number" step="0.001" value={line.receivedQty}
                       onChange={(e) => { const arr = [...grnLines]; arr[idx].receivedQty = parseFloat(e.target.value) || 0; setGrnLines(arr); }}
