@@ -27,7 +27,8 @@ export default function TerminalPage() {
   const { user } = useAuthStore();
   const {
     activeShift, cart, orderType, selectedTable, customerId, servedById,
-    currentOrderId, setCurrentOrderId, discount, orderTakerId, needsPackaging,
+    currentOrderId, setCurrentOrderId, discount, orderTakerId,
+    needsPackaging, needsFoodPackaging,
     cartTotal, clearCart,
   } = usePosStore();
 
@@ -64,6 +65,7 @@ export default function TerminalPage() {
       servedById: servedById || undefined,
       orderTakerId: orderTakerId || undefined,
       needsPackaging,
+      needsFoodPackaging,
       items: cart.map((item) => ({
         menuItemId: item.menuItemId,
         variantId: item.variantId,

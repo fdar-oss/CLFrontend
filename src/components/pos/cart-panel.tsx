@@ -38,6 +38,7 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
     discount, setDiscount,
     orderTakerId, setOrderTakerId,
     needsPackaging, setNeedsPackaging,
+    needsFoodPackaging, setNeedsFoodPackaging,
     cartTotal, cartItemCount,
     clearCart,
   } = usePosStore();
@@ -206,25 +207,44 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
           </div>
         )}
 
-        {/* Takeaway Cup toggle (dine-in only) */}
+        {/* Takeaway packaging toggles (dine-in only) */}
         {orderType === 'DINE_IN' && (
-          <button
-            type="button"
-            onClick={() => setNeedsPackaging(!needsPackaging)}
-            className={`mt-2 w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
-              needsPackaging
-                ? 'bg-amber-50 border-amber-300 text-amber-800'
-                : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <Package className="w-3.5 h-3.5" />
-              Takeaway Cup
-            </span>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${needsPackaging ? 'bg-amber-200 text-amber-900' : 'bg-gray-200 text-gray-500'}`}>
-              {needsPackaging ? 'Yes' : 'No'}
-            </span>
-          </button>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setNeedsPackaging(!needsPackaging)}
+              className={`flex-1 flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                needsPackaging
+                  ? 'bg-amber-50 border-amber-300 text-amber-800'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5" />
+                Takeaway Cup
+              </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${needsPackaging ? 'bg-amber-200 text-amber-900' : 'bg-gray-200 text-gray-500'}`}>
+                {needsPackaging ? 'Yes' : 'No'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setNeedsFoodPackaging(!needsFoodPackaging)}
+              className={`flex-1 flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                needsFoodPackaging
+                  ? 'bg-amber-50 border-amber-300 text-amber-800'
+                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5" />
+                Takeaway Pack
+              </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${needsFoodPackaging ? 'bg-amber-200 text-amber-900' : 'bg-gray-200 text-gray-500'}`}>
+                {needsFoodPackaging ? 'Yes' : 'No'}
+              </span>
+            </button>
+          </div>
         )}
 
         {/* Order Taker (optional) */}
