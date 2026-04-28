@@ -22,6 +22,7 @@ export const posApi = {
     orderTakerId?: string;
     notes?: string;
     paymentMethod?: string;
+    needsPackaging?: boolean;
     discount?: { type: string; value: number; reason: string };
     items: { menuItemId: string; variantId?: string; variantName?: string; quantity: number; notes?: string; modifiers?: unknown[] }[];
   }) => api.post<PosOrder>('/pos/orders', data).then((r) => r.data),

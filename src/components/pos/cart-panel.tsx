@@ -10,7 +10,7 @@ import { posApi } from '@/lib/api/pos.api';
 import { Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/utils/format';
-import { ShoppingCart, Plus, Minus, Trash2, ChevronDown, User as UserIcon, Percent, X } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, ChevronDown, User as UserIcon, Percent, X, Package } from 'lucide-react';
 import { ORDER_TYPES, ORDER_TYPE_LABELS } from '@/lib/utils/constants';
 
 interface CartPanelProps {
@@ -37,6 +37,7 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
     currentOrderId, setCurrentOrderId,
     discount, setDiscount,
     orderTakerId, setOrderTakerId,
+    needsPackaging, setNeedsPackaging,
     cartTotal, cartItemCount,
     clearCart,
   } = usePosStore();
@@ -203,6 +204,27 @@ export function CartPanel({ onCheckout, onSendOrder, onPreBill, sendingOrder, ta
               </div>
             )}
           </div>
+        )}
+
+        {/* Takeaway Cup toggle (dine-in only) */}
+        {orderType === 'DINE_IN' && (
+          <button
+            type="button"
+            onClick={() => setNeedsPackaging(!needsPackaging)}
+            className={`mt-2 w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+              needsPackaging
+                ? 'bg-amber-50 border-amber-300 text-amber-800'
+                : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Package className="w-3.5 h-3.5" />
+              Takeaway Cup
+            </span>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${needsPackaging ? 'bg-amber-200 text-amber-900' : 'bg-gray-200 text-gray-500'}`}>
+              {needsPackaging ? 'Yes' : 'No'}
+            </span>
+          </button>
         )}
 
         {/* Order Taker (optional) */}
