@@ -7,6 +7,10 @@ export const inventoryApi = {
     api.post<StockItem>('/inventory/stock-items', data).then((r) => r.data),
   updateItem: (id: string, data: Partial<StockItem>) =>
     api.patch<StockItem>(`/inventory/stock-items/${id}`, data).then((r) => r.data),
+  checkDeleteItem: (id: string) =>
+    api.get(`/inventory/stock-items/${id}/check-delete`).then((r) => r.data),
+  deleteItem: (id: string) =>
+    api.delete(`/inventory/stock-items/${id}`).then((r) => r.data),
 
   getBalances: (locationId?: string) =>
     api.get<StockBalance[]>('/inventory/balances', { params: { locationId } }).then((r) => r.data),

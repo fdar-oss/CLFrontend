@@ -135,6 +135,31 @@ function StockItemsTab() {
     onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed'),
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => inventoryApi.deleteItem(id),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['stock-items'] });
+      toast.success(res.mode === 'soft' ? 'Item removed (data preserved)' : 'Item permanently deleted');
+      closeDialog();
+    },
+    onError: (e: unknown) => toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to delete'),
+  });
+
+  async function handleDelete(id: string) {
+    try {
+      const check = await inventoryApi.checkDeleteItem(id);
+      let msg: string;
+      if (check.hasData) {
+        msg = `This item has linked data:\n• ${check.links.join('\n• ')}\n\nIt will be hidden from all lists but the data will be preserved. Continue?`;
+      } else {
+        msg = 'This item has no linked data and will be permanently deleted. Continue?';
+      }
+      if (confirm(msg)) deleteMut.mutate(id);
+    } catch {
+      toast.error('Failed to check item data');
+    }
+  }
+
   function openCreate() { setEditing(null); reset({ name: '', sku: '', unit: 'ml', packUnit: 'carton' }); setOpen(true); }
   function openEdit(item: StockItem) {
     setEditing(item);
@@ -336,6 +361,13 @@ function StockItemsTab() {
               )}
             </DialogBody>
             <DialogFooter>
+              {editing && (
+                <Button variant="destructive" type="button" className="mr-auto"
+                  onClick={() => handleDelete(editing.id)}
+                  loading={deleteMut.isPending}>
+                  <Trash2 className="w-4 h-4" /> Delete
+                </Button>
+              )}
               <Button variant="outline" type="button" onClick={closeDialog}>Cancel</Button>
               <Button type="submit" loading={isSubmitting}>{editing ? 'Update' : 'Create'}</Button>
             </DialogFooter>
